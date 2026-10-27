@@ -1,0 +1,90 @@
+[
+  {
+    "id" : "contents",
+    "label" : "Toggle table of contents",
+    "steps" : [
+      {
+        "press" : "Contents",
+        "tab" : "Home"
+      }
+    ],
+    "symbol" : "list.bullet.indent"
+  },
+  {
+    "enabled" : true,
+    "id" : "pageNumbers",
+    "label" : "Toggle page numbers",
+    "steps" : [
+      {
+        "press" : "Markers",
+        "tab" : "Formatting"
+      },
+      {
+        "menuItem" : "Page numbers"
+      },
+      {
+        "keys" : "escape",
+        "wait" : 0.15
+      }
+    ],
+    "symbol" : "number.square"
+  },
+  {
+    "id" : "find",
+    "label" : "Find in this panel",
+    "steps" : [
+      {
+        "keys" : "cmd+f"
+      }
+    ],
+    "symbol" : "magnifyingglass"
+  },
+  {
+    "id" : "visualFilters",
+    "label" : "Toggle visual filters",
+    "steps" : [
+      {
+        "press" : "Visual Filters",
+        "tab" : "Formatting"
+      },
+      {
+        "menuItem" : "Show Visual Filters"
+      },
+      {
+        "keys" : "escape",
+        "wait" : 0.15
+      }
+    ],
+    "symbol" : "camera.filters"
+  },
+  {
+    "id" : "parallel",
+    "label" : "Toggle parallel text",
+    "steps" : [
+      {
+        "keys" : "shift+cmd+m"
+      }
+    ],
+    "symbol" : "rectangle.split.2x1"
+  },
+  {
+    "id" : "interlinear",
+    "label" : "Toggle interlinear",
+    "steps" : [
+      {
+        "keys" : "cmd+i"
+      }
+    ],
+    "symbol" : "character.textbox"
+  },
+  {
+    "id" : "copyVerses",
+    "label" : "Copy Bible Verses",
+    "steps" : [
+      {
+        "go" : "Copy Bible Verses"
+      }
+    ],
+    "symbol" : "doc.on.doc"
+  }
+]

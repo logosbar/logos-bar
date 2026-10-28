@@ -292,11 +292,13 @@ final class LogosDriver {
         usleep(100_000)
     }
 
-    func click(at point: CGPoint) {
+    /// Clicks at a screen point. `hover` keeps the pointer there first, for controls that only
+    /// take a click once they've drawn their hover state.
+    func click(at point: CGPoint, hover: useconds_t = 30_000) {
         activateLogos()
         let saved = CGEvent(source: nil)?.location
         CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-        usleep(30_000)
+        usleep(hover)
         for type in [CGEventType.leftMouseDown, .leftMouseUp] {
             CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
             usleep(40_000)
@@ -363,7 +365,9 @@ final class LogosDriver {
         }
         try readsScreen ? prepare() : prepareAccessibility()
         activateLogos()
-        let startedCollapsed = readsScreen ? try activePanel().buttonRow == nil : false
+        // Only ribbon steps need the active panel; layouts work through the sidebar.
+        let usesRibbon = action.steps.contains { $0.press != nil || $0.tab != nil || $0.menuItem != nil }
+        let startedCollapsed = usesRibbon ? try activePanel().buttonRow == nil : false
         openedTab = nil
         for step in action.steps {
             if let seconds = step.wait { Thread.sleep(forTimeInterval: seconds) }
@@ -474,6 +478,16 @@ final class LogosDriver {
 
     /// Saves the current panels as a named layout. Reusing the active layout's name updates it.
     func saveLayout(_ name: String) throws {
+        // Updating the active layout has a shortcut (Update active, ⌃⌥⌘L); a new name needs the menu.
+        if let active = try activeLayoutName(), active.caseInsensitiveCompare(name) == .orderedSame {
+            let before = saveMarker(for: active)
+            try sendKeys("ctrl+opt+cmd+l")
+            for _ in 0..<8 {
+                Thread.sleep(forTimeInterval: 0.25)
+                if saveMarker(for: active) != before { return }
+            }
+            log("Update active (⌃⌥⌘L) saved nothing; saving through the Layouts menu")
+        }
         let (menu, button) = try openLayoutsMenu()
         guard let save = try locate("Save as named layout", in: menu) else {
             try sendKeys("escape")
@@ -492,6 +506,25 @@ final class LogosDriver {
     /// Names of saved layouts, most recently saved first, read from Logos's own layouts database.
     /// Leaves out the unnamed history snapshots and Logos's automatic "Application Closed" saves.
     func savedLayoutNames(limit: Int) -> [String] {
+        guard limit > 0 else { return [] }
+        return queryLayouts("""
+            SELECT Title, MAX(CreatedDate) AS Saved FROM Layouts
+            WHERE IsDeleted = 0 AND Title <> '' AND Title <> 'Application Closed'
+            GROUP BY Title ORDER BY Saved DESC LIMIT ?
+            """, "\(limit)")
+    }
+
+    /// Changes whenever Logos saves a layout under `name`, whether it adds a row or rewrites one.
+    func saveMarker(for name: String) -> String? {
+        queryLayouts("""
+            SELECT COUNT(*) || ' ' || IFNULL(MAX(LayoutId), '') || ' ' || IFNULL(MAX(CreatedDate), '') || ' ' || IFNULL(MAX(SyncDate), '')
+                || ' ' || IFNULL(SUM(SyncState), '') || ' ' || IFNULL(SUM(LENGTH(Xml)), '')
+            FROM Layouts WHERE IsDeleted = 0 AND Title = ?
+            """, name).first
+    }
+
+    /// Runs a read-only query on Logos's layouts database and returns the first column of each row.
+    private func queryLayouts(_ sql: String, _ parameters: String...) -> [String] {
         let documents = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Logos4/Documents")
         // One folder per signed-in account; use the one Logos wrote to last.
@@ -501,7 +534,7 @@ final class LogosDriver {
                 guard let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else { return nil }
                 return (url, modified)
             }
-        guard limit > 0, let path = databases.max(by: { $0.1 < $1.1 })?.0.path else { return [] }
+        guard let path = databases.max(by: { $0.1 < $1.1 })?.0.path else { return [] }
 
         var db: OpaquePointer?
         defer { sqlite3_close(db) }
@@ -510,23 +543,22 @@ final class LogosDriver {
             return []
         }
         sqlite3_busy_timeout(db, 500)
-        let sql = """
-            SELECT Title, MAX(CreatedDate) AS Saved FROM Layouts
-            WHERE IsDeleted = 0 AND Title <> '' AND Title <> 'Application Closed'
-            GROUP BY Title ORDER BY Saved DESC LIMIT ?
-            """
         var statement: OpaquePointer?
         defer { sqlite3_finalize(statement) }
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             log("Couldn't read Logos's layouts: \(String(cString: sqlite3_errmsg(db)))")
             return []
         }
-        sqlite3_bind_int(statement, 1, Int32(limit))
-        var names: [String] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            if let title = sqlite3_column_text(statement, 0) { names.append(String(cString: title)) }
+        // SQLITE_TRANSIENT: SQLite copies the text, since Swift's string buffer doesn't outlive the call.
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        for (index, value) in parameters.enumerated() {
+            sqlite3_bind_text(statement, Int32(index + 1), value, -1, transient)
         }
-        return names
+        var rows: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let text = sqlite3_column_text(statement, 0) { rows.append(String(cString: text)) }
+        }
+        return rows
     }
 
     /// Opens a saved layout: searches for it in Logos's Layouts menu and clicks the newest match.
@@ -538,11 +570,28 @@ final class LogosDriver {
             Thread.sleep(forTimeInterval: 0.25)
             // The topmost match is what was typed into the search box.
             guard let search = try locateAll(name, in: menu).min(by: { $0.rect.minY < $1.rect.minY })?.rect else { continue }
-            let firstRow = CGRect(x: search.minX, y: search.maxY + 10, width: 560, height: 110)
-            guard try locate(name, in: firstRow) != nil else { continue }
-            // Clicking the name offers Rename and Delete; clicking the thumbnail opens the layout.
-            press(CGRect(x: search.minX + 80, y: search.maxY + 55, width: 1, height: 1))
-            return
+            // Each save is its own result, newest first, and Logos can leave the list scrolled with
+            // the top row cut off, so go by the topmost result whose name is showing.
+            let results = CGRect(x: search.minX, y: search.maxY + 10, width: 560, height: max(menu.maxY - search.maxY - 10, 0))
+            let hits = try locateAll(name, in: results)
+            guard let row = (hits.filter(\.whole).isEmpty ? hits : hits.filter(\.whole))
+                .min(by: { $0.rect.minY < $1.rect.minY })?.rect else { continue }
+            // Clicking the name offers Rename and Delete; clicking the thumbnail beside it opens the layout.
+            // Logos can miss a click that comes before the row's hover highlight, so rest on it first,
+            // and click again while the menu is still open.
+            let thumbnail = CGPoint(x: search.minX + 80, y: row.midY)
+            for _ in 0..<3 {
+                click(at: thumbnail, hover: 200_000)
+                // Logos shows the open layout's name in its window title.
+                for _ in 0..<8 {
+                    Thread.sleep(forTimeInterval: 0.25)
+                    if let active = try activeLayoutName(), active.caseInsensitiveCompare(name) == .orderedSame { return }
+                }
+                guard try layoutsMenuIsOpen(menu) else { break }
+                log("Opening “\(name)”: Logos didn't take the click; clicking again")
+            }
+            if try layoutsMenuIsOpen(menu) { try sendKeys("escape") }
+            throw DriverError("Clicked “\(name)” in the Layouts menu, but Logos didn't switch to it.")
         }
         let seen = visibleText(in: menu)
         try sendKeys("escape")

@@ -117,8 +117,9 @@ list of `steps`. A step can have:
 
 The Layouts button drops down a menu:
 
-- **Save Current Layout…** offers the active layout's name: keep it to update that layout, or type
-  a new name. Logos keeps every save, so older versions stay in the Layouts menu's history.
+- **Save Current Layout…** offers the active layout's name: keep it to update that layout (done
+  with Logos's Update active shortcut, ⌃⌥⌘L), or type a new name (done through the Layouts menu).
+  Logos keeps every save, so older versions stay in the Layouts menu's history.
 - The layouts you saved most recently, newest first, with the active one ticked. Settings chooses
   how many (0–5, 3 to start). LogosBar reads the names from Logos's own layouts database
   (`~/Library/Application Support/Logos4/Documents/*/LayoutManager/layouts.db`, read only), leaving

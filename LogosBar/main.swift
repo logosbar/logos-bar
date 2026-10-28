@@ -391,6 +391,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.spacing = 2 * scale
         panel.contentView?.layer?.cornerRadius = 10 * scale
         background.layer?.cornerRadius = 10 * scale
+        // A thin outline in the grip's accent color, drawn over the edges of everything inside.
+        panel.contentView?.layer?.borderWidth = docked ? 0 : 1 * scale
+        panel.contentView?.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.6).cgColor
         // Floating, the grip strip takes the leading edge (the top when vertical); leave room for it.
         let horizontal = stack.orientation == .horizontal
         let gripThickness = GripView.baseThickness * scale

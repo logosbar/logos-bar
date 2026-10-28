@@ -98,13 +98,17 @@ final class LogosDriver {
     }
 
     func findButton(_ text: String, in root: AXUIElement) -> AXUIElement? {
-        var queue = [root], index = 0
+        findButtons(text, in: root).first
+    }
+
+    func findButtons(_ text: String, in root: AXUIElement) -> [AXUIElement] {
+        var queue = [root], index = 0, found: [AXUIElement] = []
         while index < queue.count {
             let element = queue[index]; index += 1
-            if role(element) == "AXButton", label(element).caseInsensitiveCompare(text) == .orderedSame { return element }
+            if role(element) == "AXButton", label(element).caseInsensitiveCompare(text) == .orderedSame { found.append(element) }
             queue.append(contentsOf: children(element))
         }
-        return nil
+        return found
     }
 
     // MARK: Panels
@@ -132,6 +136,22 @@ final class LogosDriver {
         return found
     }
 
+    /// Every panel's tab strip, including panels without a ribbon (such as guides): the short
+    /// scroll areas that hold a panel's tabs.
+    func tabStrips() throws -> [CGRect] {
+        var found: [CGRect] = []
+        func walk(_ element: AXUIElement) {
+            for kid in children(element) {
+                if role(kid) == "AXScrollArea", let rect = frame(kid), (20...60).contains(rect.height), rect.width > 100 {
+                    found.append(rect)
+                }
+                walk(kid)
+            }
+        }
+        walk(try mainWindow())
+        return found
+    }
+
     /// The panel Logos treats as active: the one holding keyboard focus, else the one last clicked.
     func activePanel() throws -> Panel {
         let all = try panels()
@@ -149,7 +169,8 @@ final class LogosDriver {
 
     // MARK: Reading the screen
 
-    func capture(_ rect: CGRect) throws -> CGImage {
+    /// Captures `rect` of the screen; `hidingLogosBar` leaves LogosBar's own windows out.
+    func capture(_ rect: CGRect, hidingLogosBar: Bool = false) throws -> CGImage {
         try blocking {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             guard let display = content.displays.first(where: { $0.frame.intersects(rect) }) ?? content.displays.first else {
@@ -163,7 +184,8 @@ final class LogosDriver {
             config.width = Int(rect.width * scale)
             config.height = Int(rect.height * scale)
             config.showsCursor = false
-            let filter = SCContentFilter(display: display, excludingWindows: [])
+            let own = hidingLogosBar ? content.windows.filter { $0.owningApplication?.processID == getpid() } : []
+            let filter = SCContentFilter(display: display, excludingWindows: own)
             return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
         }
     }
@@ -190,7 +212,14 @@ final class LogosDriver {
     /// Finds `text` on screen inside `rect` and returns where it is. Whole-line matches beat
     /// matches inside a longer line.
     func locate(_ text: String, in rect: CGRect) throws -> CGRect? {
-        var best: (rect: CGRect, score: Int)?
+        var best: (rect: CGRect, whole: Bool)?
+        for hit in try locateAll(text, in: rect) where best == nil || (hit.whole && !best!.whole) { best = hit }
+        return best?.rect
+    }
+
+    /// Every place `text` appears as whole words inside `rect`, and whether it's the whole line.
+    func locateAll(_ text: String, in rect: CGRect) throws -> [(rect: CGRect, whole: Bool)] {
+        var hits: [(rect: CGRect, whole: Bool)] = []
         for line in try readText(in: rect) {
             guard let range = line.text.range(of: text, options: [.caseInsensitive, .diacriticInsensitive]) else { continue }
             // Require word boundaries so "View" doesn't match "Paged view".
@@ -199,16 +228,58 @@ final class LogosDriver {
             let isWordStart = !before.isLetter, isWordEnd = !after.isLetter
             guard isWordStart && isWordEnd else { continue }
             let trimmed = line.text.trimmingCharacters(in: .whitespaces)
-            let score = trimmed.caseInsensitiveCompare(text) == .orderedSame ? 2 : 1
             guard let box = try? line.observation.boundingBox(for: range)?.boundingBox else { continue }
-            let hit = screenRect(box, in: line.area)
-            if best == nil || score > best!.score { best = (hit, score) }
+            hits.append((screenRect(box, in: line.area), trimmed.caseInsensitiveCompare(text) == .orderedSame))
         }
-        return best?.rect
+        return hits
     }
 
     func visibleText(in rect: CGRect) -> String {
         ((try? readText(in: rect)) ?? []).map(\.text).joined(separator: " · ")
+    }
+
+    // MARK: The active tab
+
+    /// The orange strip Logos draws along the top of the active panel's selected tab, and the
+    /// tab row it sits in.
+    func activeTabStrip() throws -> (orange: CGRect, tabRow: CGRect) {
+        try prepare()
+        for strip in try tabStrips() {
+            // The orange sits at the very top of the tab row, above the tab icons.
+            let top = CGRect(x: strip.minX, y: strip.minY, width: strip.width, height: 6)
+            let image = try capture(top, hidingLogosBar: true)
+            let scale = CGFloat(image.width) / top.width
+            if let run = orangeRun(in: image, minLength: Int(20 * scale)) {
+                let orange = CGRect(x: top.minX + CGFloat(run.start) / scale, y: top.minY + CGFloat(run.row) / scale,
+                                    width: CGFloat(run.length) / scale, height: 3)
+                return (orange, strip)
+            }
+        }
+        throw DriverError("Couldn't see the orange strip on the active panel's tab.")
+    }
+
+    /// The topmost long horizontal run of orange pixels in `image`.
+    func orangeRun(in image: CGImage, minLength: Int) -> (row: Int, start: Int, length: Int)? {
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        for row in 0..<height {
+            var best: (start: Int, length: Int)?
+            var start = 0
+            for x in 0...width {
+                let i = (row * width + x) * 4
+                let orange = x < width && pixels[i] > 190 && (70...175).contains(pixels[i + 1]) && pixels[i + 2] < 110
+                if !orange {
+                    if x - start >= minLength, x - start > best?.length ?? 0 { best = (start, x - start) }
+                    start = x + 1
+                }
+            }
+            if let best { return (row, best.start, best.length) }
+        }
+        return nil
     }
 
     // MARK: Input
@@ -286,7 +357,9 @@ final class LogosDriver {
     /// is closed again afterwards; one that was already open is left alone.
     func run(_ action: Action, collapseRibbon: Bool) throws {
         // Only steps that read the ribbon need Screen Recording; shortcuts and the Go box don't.
-        let readsScreen = action.steps.contains { $0.press != nil || $0.tab != nil || $0.menuItem != nil }
+        let readsScreen = action.steps.contains {
+            $0.press != nil || $0.tab != nil || $0.menuItem != nil || $0.layout != nil || $0.saveLayout != nil
+        }
         try readsScreen ? prepare() : prepareAccessibility()
         activateLogos()
         let startedCollapsed = readsScreen ? try activePanel().buttonRow == nil : false
@@ -298,6 +371,8 @@ final class LogosDriver {
             if let item = step.menuItem { try chooseMenuItem(item) }
             if let keys = step.keys { try sendKeys(keys) }
             if let text = step.go { try runInGoBox(text) }
+            if let name = step.layout { try openLayout(name) }
+            if let name = step.saveLayout { try saveLayout(name) }
         }
         if collapseRibbon, startedCollapsed, let tab = openedTab {
             Thread.sleep(forTimeInterval: 0.2)
@@ -359,15 +434,90 @@ final class LogosDriver {
         try sendKeys("return")
     }
 
+    /// The name of the layout Logos is using, from its window title (“Logos Max - Hebrews Study”).
+    func activeLayoutName() throws -> String? {
+        try prepareAccessibility()
+        guard let title: String = attr(try mainWindow(), "AXTitle"), let dash = title.range(of: " - ") else { return nil }
+        return String(title[dash.upperBound...])
+    }
+
+    /// Opens Logos's Layouts menu and returns the area it covers. The menu opens beside the
+    /// sidebar's Layouts icon: saved layouts on the left, and on the right a search box (focused)
+    /// over the layout history — the current panels first, then saved layouts, newest first.
+    func openLayoutsMenu() throws -> (area: CGRect, button: AXUIElement) {
+        // The sidebar's Layouts icon sits near the bottom; a shortcut-bar folder higher up shares its name.
+        let buttons = findButtons("Layouts", in: try mainWindow()).compactMap { button in frame(button).map { (button, $0) } }
+        guard let (button, icon) = buttons.max(by: { $0.1.minY < $1.1.minY }) else {
+            throw DriverError("Couldn't find Logos's Layouts button.")
+        }
+        activateLogos()
+        let menu = CGRect(x: icon.maxX, y: icon.maxY - 700, width: 800, height: 760)
+        // The button toggles the menu. If it's already showing, close it first so it reopens with
+        // the search box focused.
+        if try layoutsMenuIsOpen(menu) {
+            AXUIElementPerformAction(button, kAXPressAction as CFString)
+            Thread.sleep(forTimeInterval: 0.4)
+        }
+        AXUIElementPerformAction(button, kAXPressAction as CFString)
+        // Make sure it's open before typing, so nothing typed can land in a panel.
+        for _ in 0..<8 {
+            Thread.sleep(forTimeInterval: 0.2)
+            if try layoutsMenuIsOpen(menu) { return (menu, button) }
+        }
+        throw DriverError("Logos's Layouts menu didn't open.")
+    }
+
+    func layoutsMenuIsOpen(_ menu: CGRect) throws -> Bool {
+        try locate("Close active layout", in: menu) != nil
+    }
+
+    /// Saves the current panels as a named layout. Reusing the active layout's name updates it.
+    func saveLayout(_ name: String) throws {
+        let (menu, button) = try openLayoutsMenu()
+        guard let save = try locate("Save as named layout", in: menu) else {
+            try sendKeys("escape")
+            throw DriverError("Couldn't see “Save as named layout” in the Layouts menu.")
+        }
+        press(save)   // turns into a name box
+        Thread.sleep(forTimeInterval: 0.3)
+        typeText(name)
+        Thread.sleep(forTimeInterval: 0.2)
+        try sendKeys("return")
+        // After saving, Escape no longer closes the menu; its button toggles it shut.
+        Thread.sleep(forTimeInterval: 0.6)
+        if try layoutsMenuIsOpen(menu) { AXUIElementPerformAction(button, kAXPressAction as CFString) }
+    }
+
+    /// Opens a saved layout: searches for it in Logos's Layouts menu and clicks the newest match.
+    func openLayout(_ name: String) throws {
+        let menu = try openLayoutsMenu().area
+        typeText(name)
+
+        for _ in 0..<6 {
+            Thread.sleep(forTimeInterval: 0.25)
+            // The topmost match is what was typed into the search box.
+            guard let search = try locateAll(name, in: menu).min(by: { $0.rect.minY < $1.rect.minY })?.rect else { continue }
+            let firstRow = CGRect(x: search.minX, y: search.maxY + 10, width: 560, height: 110)
+            guard try locate(name, in: firstRow) != nil else { continue }
+            // Clicking the name offers Rename and Delete; clicking the thumbnail opens the layout.
+            press(CGRect(x: search.minX + 80, y: search.maxY + 55, width: 1, height: 1))
+            return
+        }
+        let seen = visibleText(in: menu)
+        try sendKeys("escape")
+        throw DriverError("No saved layout called “\(name)”. The Layouts menu shows: \(seen.prefix(300))")
+    }
+
     // MARK: Diagnostics
 
     func describeActivePanel() throws -> String {
         try prepare()
         let all = try panels()
         let active = try activePanel()
-        var lines = ["panels: " + all.map { "\($0.area)" }.joined(separator: ", "), "active ribbon: \(active.ribbon)"]
+        var lines = ["tab strips: " + ((try? tabStrips()) ?? []).map { "\($0)" }.joined(separator: ", "), "panels: " + all.map { "\($0.area)" }.joined(separator: ", "), "active ribbon: \(active.ribbon)"]
         lines.append("tab row: " + visibleText(in: active.tabRow))
         if let row = active.buttonRow { lines.append("button row: " + visibleText(in: row)) }
+        lines.append("active tab strip: " + ((try? activeTabStrip()).map { "\($0.orange)" } ?? "not found"))
         return lines.joined(separator: "\n")
     }
 }

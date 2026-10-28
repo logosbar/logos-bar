@@ -36,6 +36,9 @@ struct Step: Codable {
     var keys: String?       // keystroke sent to Logos, e.g. "cmd+f"
     var go: String?         // text to run through the Go box, e.g. "Copy Bible Verses"
     var wait: Double?       // pause in seconds
+    var layoutPrompt: Bool? // ask whether to save the current layout or open one, then do it
+    var layout: String?     // saved layout to open, by name
+    var saveLayout: String? // name to save the current panels under
 }
 
 struct Action: Codable, Identifiable {
@@ -69,6 +72,8 @@ let defaultActions: [Action] = [
            steps: [Step(keys: "cmd+i")]),
     Action(id: "copyVerses", label: "Copy Bible Verses", symbol: "doc.on.doc",
            steps: [Step(go: "Copy Bible Verses")]),
+    Action(id: "layouts", label: "Save or open a layout", symbol: "rectangle.3.group",
+           steps: [Step(layoutPrompt: true)]),
 ]
 
 func saveActions(_ actions: [Action]) {
@@ -83,7 +88,14 @@ func loadActions() -> [Action] {
         saveActions(defaultActions)
     }
     do {
-        return try JSONDecoder().decode([Action].self, from: Data(contentsOf: actionsURL))
+        var actions = try JSONDecoder().decode([Action].self, from: Data(contentsOf: actionsURL))
+        // Buttons added in later versions join the end of an existing actions.json.
+        let missing = defaultActions.filter { action in !actions.contains { $0.id == action.id } }
+        if !missing.isEmpty {
+            actions += missing
+            saveActions(actions)
+        }
+        return actions
     } catch {
         log("actions.json could not be read (\(error)); using built-in defaults")
         return defaultActions
@@ -143,6 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var busy = false
     var helpMenuFrame: CGRect?   // last known position of Logos's Help menu
     var positioning = false      // true while LogosBar moves the toolbar itself, so it isn't saved as the user's spot
+    var following = false        // true while looking for the active panel's tab
 
     var placement: Placement { prefs.placement }
     /// The buttons shown on the toolbar, in order. Button tags index into this.
@@ -170,7 +183,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let location = NSEvent.mouseLocation
             let point = CGPoint(x: location.x, y: screenHeight - location.y)
             self?.queue.async { self?.driver.lastClickInLogos = point }
+            // A click may have made another panel active; give Logos a moment to move its orange strip.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self?.followActivePanel() }
         }
+        // Keyboard and menu commands can switch panels too, so keep checking while Logos is in front.
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.followActivePanel() }
         updateVisibility()
         if CommandLine.arguments.contains("--dump") { saveUIMap() }
         if CommandLine.arguments.contains("--settings") {
@@ -260,7 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applyPlacement() {
         let docked = placement == .menuBar
         panel.level = docked ? .statusBar : .floating
-        panel.isMovableByWindowBackground = !docked
+        panel.isMovableByWindowBackground = placement == .floating
         panel.hasShadow = !docked
         let light = prefs.dockedStyle == .light
         panel.appearance = docked ? NSAppearance(named: light ? .aqua : .darkAqua) : nil
@@ -269,11 +286,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pill.layer?.borderColor = NSColor(white: 0, alpha: 0.15).cgColor
         background.isHidden = docked
         pill.isHidden = !docked
-        grip.isHidden = docked
+        // Above the active panel LogosBar places the toolbar itself, so there's nothing to drag.
+        grip.isHidden = placement != .floating
         panel.contentView?.layer?.masksToBounds = !docked
         positioning = true
         rebuildButtons()
-        if !docked {
+        if placement == .floating {
             // The size comes from the buttons; put the top-left corner back where the user left it.
             panel.setFrameTopLeftPoint(savedFloatingTopLeft())
         }
@@ -333,6 +351,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Floats the toolbar just above the orange strip on the active panel's tab, kept on screen.
+    func followActivePanel() {
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        guard placement == .abovePanel, !following, panel.isVisible,
+              front == logosBundleID || front == Bundle.main.bundleIdentifier else { return }
+        following = true
+        queue.async { [driver] in
+            let found = try? driver.activeTabStrip()
+            DispatchQueue.main.async {
+                self.following = false
+                guard self.placement == .abovePanel, let found, let primary = NSScreen.screens.first else { return }
+                // Convert from the top-left origin used by Accessibility to AppKit's bottom-left origin.
+                let size = self.panel.frame.size
+                var origin = NSPoint(x: found.orange.minX, y: primary.frame.maxY - found.orange.minY)
+                let point = NSPoint(x: origin.x + 1, y: origin.y - 1)
+                let visible = (NSScreen.screens.first { $0.frame.contains(point) } ?? primary).visibleFrame
+                origin.x = min(max(origin.x, visible.minX), visible.maxX - size.width)
+                if origin.y + size.height > visible.maxY {
+                    // A panel at the top of the screen has no room above it; hang below its tabs instead.
+                    origin.y = primary.frame.maxY - found.tabRow.maxY - size.height
+                }
+                guard origin != self.panel.frame.origin else { return }
+                self.positioning = true
+                self.panel.setFrameOrigin(origin)
+                self.positioning = false
+            }
+        }
+    }
+
     func rebuildButtons() {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         let docked = placement == .menuBar
@@ -353,7 +400,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gripAlongTop.last?.constant = gripThickness
         NSLayoutConstraint.deactivate(gripAlongLeft + gripAlongTop)
         NSLayoutConstraint.activate(horizontal ? gripAlongLeft : gripAlongTop)
-        let gripRoom = gripThickness + pad
+        let gripRoom = placement == .floating ? gripThickness + pad : pad
         stack.edgeInsets = docked ? NSEdgeInsets(top: 0, left: 5, bottom: 0, right: 5)
             : NSEdgeInsets(top: horizontal ? pad : gripRoom, left: horizontal ? gripRoom : pad, bottom: pad, right: pad)
         for (index, action) in visibleActions.enumerated() {
@@ -423,6 +470,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if wanted && !visibleActions.isEmpty {
             if placement == .menuBar { dockAfterHelpMenu() }
             panel.orderFrontRegardless()
+            followActivePanel()
         } else {
             panel.orderOut(nil)
         }
@@ -431,7 +479,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func runAction(_ sender: NSButton) {
         let actions = visibleActions
         guard !busy, actions.indices.contains(sender.tag) else { return }
-        let action = actions[sender.tag]
+        var action = actions[sender.tag]
+        if action.steps.contains(where: { $0.layoutPrompt == true }) {
+            guard let steps = askForLayoutSteps() else { return }
+            action.steps = steps
+        }
         busy = true
         sender.contentTintColor = .controlAccentColor
         let collapseRibbon = prefs.collapseRibbon
@@ -455,6 +507,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    /// Asks whether to save the current layout or open a saved one, and returns the steps that do it.
+    /// Both are done through Logos's Layouts menu.
+    func askForLayoutSteps() -> [Step]? {
+        // `--layout <name>` and `--save-layout <name>` answer the prompts, for testing from the command line.
+        let arguments = CommandLine.arguments
+        if let flag = arguments.firstIndex(of: "--layout"), flag + 1 < arguments.count {
+            return [Step(layout: arguments[flag + 1])]
+        }
+        if let flag = arguments.firstIndex(of: "--save-layout"), flag + 1 < arguments.count {
+            return [Step(saveLayout: arguments[flag + 1])]
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        let choice = NSAlert()
+        choice.messageText = "Layouts"
+        choice.informativeText = "Save the layout you’re using, or open a saved layout."
+        choice.addButton(withTitle: "Open Layout…")
+        choice.addButton(withTitle: "Save Current Layout")
+        choice.addButton(withTitle: "Cancel")
+        switch choice.runModal() {
+        case .alertSecondButtonReturn: return askForLayoutToSave()
+        case .alertFirstButtonReturn: break
+        default: return nil
+        }
+
+        // Offer the layouts opened before; any other name can be typed.
+        var recent = UserDefaults.standard.stringArray(forKey: "recentLayouts") ?? []
+        let field = NSComboBox(frame: NSRect(x: 0, y: 0, width: 260, height: 26))
+        field.addItems(withObjectValues: recent)
+        field.placeholderString = "Layout name"
+        field.completes = true
+        let ask = NSAlert()
+        ask.messageText = "Open Layout"
+        ask.informativeText = "Type the name of the layout to open."
+        ask.accessoryView = field
+        ask.addButton(withTitle: "Open")
+        ask.addButton(withTitle: "Cancel")
+        ask.window.initialFirstResponder = field
+        guard ask.runModal() == .alertFirstButtonReturn else { return nil }
+        let name = field.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return nil }
+        recent.removeAll { $0.caseInsensitiveCompare(name) == .orderedSame }
+        UserDefaults.standard.set(Array(([name] + recent).prefix(10)), forKey: "recentLayouts")
+        return [Step(layout: name)]
+    }
+
+    /// Asks for the name to save the current layout under, offering the active layout's name.
+    func askForLayoutToSave() -> [Step]? {
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        field.stringValue = queue.sync { [driver] in (try? driver.activeLayoutName()) ?? nil } ?? ""
+        field.placeholderString = "Layout name"
+        let ask = NSAlert()
+        ask.messageText = "Save Layout"
+        ask.informativeText = "Save the open panels as a layout. Keep the active layout’s name to update it, or type a new name."
+        ask.accessoryView = field
+        ask.addButton(withTitle: "Save")
+        ask.addButton(withTitle: "Cancel")
+        ask.window.initialFirstResponder = field
+        guard ask.runModal() == .alertFirstButtonReturn else { return nil }
+        let name = field.stringValue.trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? nil : [Step(saveLayout: name)]
     }
 
     func refreshMenus() {

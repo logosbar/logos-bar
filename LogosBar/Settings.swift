@@ -57,6 +57,10 @@ final class Preferences: ObservableObject {
     @Published var collapseRibbon: Bool {
         didSet { defaults.set(collapseRibbon, forKey: "collapseRibbon") }
     }
+    /// How many recently saved layouts the Layouts button's menu lists (0–5).
+    @Published var recentLayoutCount: Int {
+        didSet { defaults.set(recentLayoutCount, forKey: "recentLayoutCount") }
+    }
     @Published var onlyWithLogos: Bool {
         didSet { defaults.set(!onlyWithLogos, forKey: "alwaysVisible"); changed() }
     }
@@ -72,6 +76,7 @@ final class Preferences: ObservableObject {
         size = ToolbarSize(rawValue: defaults.string(forKey: "size") ?? "") ?? .standard
         collapseRibbon = defaults.object(forKey: "collapseRibbon") as? Bool ?? true
         onlyWithLogos = !defaults.bool(forKey: "alwaysVisible")
+        recentLayoutCount = defaults.object(forKey: "recentLayoutCount") as? Int ?? 3
         actions = loadActions()
     }
 
@@ -128,6 +133,18 @@ struct SettingsView: View {
                 Text("Logos toolbar")
             } footer: {
                 Text("When a button has to open a row of Logos’s toolbar (for page numbers, contents or visual filters), close it again afterwards. A row you opened yourself is left open.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker("Recent layouts to list", selection: $prefs.recentLayoutCount) {
+                    ForEach(0...5, id: \.self) { Text("\($0)").tag($0) }
+                }
+            } header: {
+                Text("Layouts button")
+            } footer: {
+                Text("The layouts you saved most recently in Logos, listed in the Layouts button’s menu between Save Current Layout and Open Other Layout.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

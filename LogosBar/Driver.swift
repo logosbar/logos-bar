@@ -7,6 +7,7 @@
 import Cocoa
 import ApplicationServices
 import ScreenCaptureKit
+import SQLite3
 import Vision
 
 struct DriverError: Error, CustomStringConvertible {
@@ -486,6 +487,46 @@ final class LogosDriver {
         // After saving, Escape no longer closes the menu; its button toggles it shut.
         Thread.sleep(forTimeInterval: 0.6)
         if try layoutsMenuIsOpen(menu) { AXUIElementPerformAction(button, kAXPressAction as CFString) }
+    }
+
+    /// Names of saved layouts, most recently saved first, read from Logos's own layouts database.
+    /// Leaves out the unnamed history snapshots and Logos's automatic "Application Closed" saves.
+    func savedLayoutNames(limit: Int) -> [String] {
+        let documents = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Logos4/Documents")
+        // One folder per signed-in account; use the one Logos wrote to last.
+        let databases = ((try? FileManager.default.contentsOfDirectory(at: documents, includingPropertiesForKeys: nil)) ?? [])
+            .map { $0.appendingPathComponent("LayoutManager/layouts.db") }
+            .compactMap { url -> (URL, Date)? in
+                guard let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else { return nil }
+                return (url, modified)
+            }
+        guard limit > 0, let path = databases.max(by: { $0.1 < $1.1 })?.0.path else { return [] }
+
+        var db: OpaquePointer?
+        defer { sqlite3_close(db) }
+        guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            log("Couldn't open Logos's layouts: \(String(cString: sqlite3_errmsg(db)))")
+            return []
+        }
+        sqlite3_busy_timeout(db, 500)
+        let sql = """
+            SELECT Title, MAX(CreatedDate) AS Saved FROM Layouts
+            WHERE IsDeleted = 0 AND Title <> '' AND Title <> 'Application Closed'
+            GROUP BY Title ORDER BY Saved DESC LIMIT ?
+            """
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            log("Couldn't read Logos's layouts: \(String(cString: sqlite3_errmsg(db)))")
+            return []
+        }
+        sqlite3_bind_int(statement, 1, Int32(limit))
+        var names: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let title = sqlite3_column_text(statement, 0) { names.append(String(cString: title)) }
+        }
+        return names
     }
 
     /// Opens a saved layout: searches for it in Logos's Layouts menu and clicks the newest match.

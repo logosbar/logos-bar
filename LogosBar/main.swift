@@ -518,11 +518,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func runAction(_ sender: HoverButton) {
         let actions = visibleActions
         guard !busy, actions.indices.contains(sender.tag) else { return }
-        var action = actions[sender.tag]
+        let action = actions[sender.tag]
         if action.steps.contains(where: { $0.layoutPrompt == true }) {
-            guard let steps = askForLayoutSteps() else { return }
-            action.steps = steps
+            if let steps = layoutStepsFromCommandLine() {
+                perform(action, steps: steps, from: sender)
+            } else {
+                showLayoutsMenu(for: action, from: sender)
+            }
+            return
         }
+        perform(action, steps: action.steps, from: sender)
+    }
+
+    func perform(_ action: Action, steps: [Step], from sender: HoverButton) {
+        var action = action
+        action.steps = steps
         busy = true
         sender.statusTint = .controlAccentColor
         let collapseRibbon = prefs.collapseRibbon
@@ -548,10 +558,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Asks whether to save the current layout or open a saved one, and returns the steps that do it.
-    /// Both are done through Logos's Layouts menu.
-    func askForLayoutSteps() -> [Step]? {
-        // `--layout <name>` and `--save-layout <name>` answer the prompts, for testing from the command line.
+    // MARK: Layouts
+
+    /// `--layout <name>` and `--save-layout <name>` answer the Layouts menu, for testing from the command line.
+    func layoutStepsFromCommandLine() -> [Step]? {
         let arguments = CommandLine.arguments
         if let flag = arguments.firstIndex(of: "--layout"), flag + 1 < arguments.count {
             return [Step(layout: arguments[flag + 1])]
@@ -559,38 +569,97 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let flag = arguments.firstIndex(of: "--save-layout"), flag + 1 < arguments.count {
             return [Step(saveLayout: arguments[flag + 1])]
         }
+        return nil
+    }
+
+    /// The Layouts button's choice while its menu is open.
+    var pendingLayoutAction: (action: Action, button: HoverButton)?
+
+    /// Drops down a menu under the Layouts button: Save Current Layout, the most recently saved
+    /// layouts (the active one ticked), then Open Other Layout.
+    func showLayoutsMenu(for action: Action, from button: HoverButton) {
+        let active = queue.sync { [driver] in (try? driver.activeLayoutName()) ?? nil }
+        let recent = driver.savedLayoutNames(limit: prefs.recentLayoutCount)
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.addItem(layoutMenuItem("Save Current Layout…", tag: 0))
+        if !recent.isEmpty {
+            menu.addItem(.separator())
+            for name in recent {
+                let item = layoutMenuItem(name, tag: 2)
+                item.representedObject = name
+                item.state = name == active ? .on : .off
+                menu.addItem(item)
+            }
+        }
+        menu.addItem(.separator())
+        menu.addItem(layoutMenuItem("Open Other Layout…", tag: 1))
+        pendingLayoutAction = (action, button)
+        let below = NSPoint(x: 0, y: button.isFlipped ? button.bounds.maxY + 4 : -4)
+        menu.popUp(positioning: nil, at: below, in: button)
+    }
+
+    func layoutMenuItem(_ title: String, tag: Int) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(layoutMenuChose(_:)), keyEquivalent: "")
+        item.target = self
+        item.tag = tag
+        return item
+    }
+
+    @objc func layoutMenuChose(_ item: NSMenuItem) {
+        guard let (action, button) = pendingLayoutAction else { return }
+        pendingLayoutAction = nil
+        let steps: [Step]?
+        switch item.tag {
+        case 0: steps = askForLayoutToSave()
+        case 1: steps = askForLayoutToOpen().flatMap(stepsToOpen)
+        default: steps = (item.representedObject as? String).flatMap(stepsToOpen)
+        }
+        if let steps { perform(action, steps: steps, from: button) }
+    }
+
+    /// The steps that open a saved layout, first saving the open panels if they aren't a saved layout
+    /// and the user names them.
+    func stepsToOpen(_ name: String) -> [Step]? {
+        let active = queue.sync { [driver] in (try? driver.activeLayoutName()) ?? nil }
+        guard active?.isEmpty ?? true else { return [Step(layout: name)] }
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        field.placeholderString = "Layout name"
+        let ask = NSAlert()
+        ask.messageText = "Name the current layout?"
+        ask.informativeText = "The panels you have open aren’t saved as a layout. Give them a name to keep them before opening “\(name)”."
+        ask.accessoryView = field
+        ask.addButton(withTitle: "Save and Open")
+        ask.addButton(withTitle: "Don’t Save")
+        ask.addButton(withTitle: "Cancel")
+        ask.window.initialFirstResponder = field
         NSApp.activate(ignoringOtherApps: true)
-        let choice = NSAlert()
-        choice.messageText = "Layouts"
-        choice.informativeText = "Save the layout you’re using, or open a saved layout."
-        choice.addButton(withTitle: "Open Layout…")
-        choice.addButton(withTitle: "Save Current Layout")
-        choice.addButton(withTitle: "Cancel")
-        switch choice.runModal() {
-        case .alertSecondButtonReturn: return askForLayoutToSave()
-        case .alertFirstButtonReturn: break
+        switch ask.runModal() {
+        case .alertFirstButtonReturn:
+            let newName = field.stringValue.trimmingCharacters(in: .whitespaces)
+            return newName.isEmpty ? [Step(layout: name)] : [Step(saveLayout: newName), Step(layout: name)]
+        case .alertSecondButtonReturn: return [Step(layout: name)]
         default: return nil
         }
+    }
 
-        // Offer the layouts opened before; any other name can be typed.
-        var recent = UserDefaults.standard.stringArray(forKey: "recentLayouts") ?? []
+    /// Asks for the name of a saved layout to open, offering every layout saved in Logos.
+    func askForLayoutToOpen() -> String? {
         let field = NSComboBox(frame: NSRect(x: 0, y: 0, width: 260, height: 26))
-        field.addItems(withObjectValues: recent)
+        field.addItems(withObjectValues: driver.savedLayoutNames(limit: 200))
         field.placeholderString = "Layout name"
         field.completes = true
         let ask = NSAlert()
         ask.messageText = "Open Layout"
-        ask.informativeText = "Type the name of the layout to open."
+        ask.informativeText = "Type or choose the name of the layout to open."
         ask.accessoryView = field
         ask.addButton(withTitle: "Open")
         ask.addButton(withTitle: "Cancel")
         ask.window.initialFirstResponder = field
+        NSApp.activate(ignoringOtherApps: true)
         guard ask.runModal() == .alertFirstButtonReturn else { return nil }
         let name = field.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return nil }
-        recent.removeAll { $0.caseInsensitiveCompare(name) == .orderedSame }
-        UserDefaults.standard.set(Array(([name] + recent).prefix(10)), forKey: "recentLayouts")
-        return [Step(layout: name)]
+        return name.isEmpty ? nil : name
     }
 
     /// Asks for the name to save the current layout under, offering the active layout's name.
@@ -605,6 +674,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ask.addButton(withTitle: "Save")
         ask.addButton(withTitle: "Cancel")
         ask.window.initialFirstResponder = field
+        NSApp.activate(ignoringOtherApps: true)
         guard ask.runModal() == .alertFirstButtonReturn else { return nil }
         let name = field.stringValue.trimmingCharacters(in: .whitespaces)
         return name.isEmpty ? nil : [Step(saveLayout: name)]

@@ -13,7 +13,7 @@ you're working in, or sit in the menu bar just after Logos's **Help** menu.
 | Parallel text | ⇧⌘M |
 | Interlinear | ⌘I (inline reverse interlinear) |
 | Copy Bible Verses | Types "Copy Bible Verses" into the Go box |
-| Layouts | Asks whether to save the open panels as a layout or open a saved one, then does it in the sidebar's Layouts menu |
+| Layouts | Drops down a menu: save the open panels as a layout, open one of your most recently saved layouts, or open any other saved layout, through the sidebar's Layouts menu |
 
 Buttons act on the Logos panel you last clicked in.
 
@@ -109,16 +109,25 @@ list of `steps`. A step can have:
 - `keys`: send a keystroke to Logos, such as `"cmd+f"` or `"shift+cmd+m"`.
 - `go`: type text into the Go box and press Return.
 - `wait`: pause for that many seconds first.
-- `layoutPrompt`: ask whether to save or open a layout (used by the Layouts button).
+- `layoutPrompt`: show the Layouts menu (used by the Layouts button).
 - `layout`: open the saved layout with this name.
 - `saveLayout`: save the open panels as a layout with this name.
 
 ### Layouts
 
-**Open Layout…** asks for a name (the drop-down remembers the last 10), searches for it in Logos's
-Layouts menu and opens the newest save with that name. **Save Current Layout** offers the active
-layout's name: keep it to update that layout, or type a new name. Logos keeps every save, so
-older versions stay in the Layouts menu's history.
+The Layouts button drops down a menu:
+
+- **Save Current Layout…** offers the active layout's name: keep it to update that layout, or type
+  a new name. Logos keeps every save, so older versions stay in the Layouts menu's history.
+- The layouts you saved most recently, newest first, with the active one ticked. Settings chooses
+  how many (0–5, 3 to start). LogosBar reads the names from Logos's own layouts database
+  (`~/Library/Application Support/Logos4/Documents/*/LayoutManager/layouts.db`, read only), leaving
+  out history snapshots and Logos's automatic "Application Closed" saves.
+- **Open Other Layout…** asks for a name, offering every saved layout.
+
+Opening a layout searches for it in Logos's Layouts menu and opens the newest save with that name.
+If the open panels aren't a saved layout (Logos's window title shows no layout name), LogosBar first
+asks whether to name and save them.
 
 ## How it works
 

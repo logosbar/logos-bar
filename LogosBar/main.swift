@@ -140,6 +140,41 @@ final class GripView: NSView {
     }
 }
 
+/// A toolbar button that lifts under the pointer: a raised accent-tinted tile behind an accent icon.
+final class HoverButton: NSButton {
+    var restingTint: NSColor = .labelColor { didSet { updateLook() } }
+    /// Overrides the icon color while the button's action runs or after it fails.
+    var statusTint: NSColor? { didSet { updateLook() } }
+    var scale: CGFloat = 1 { didSet { updateLook() } }
+    private var hovered = false
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        // Always active: the toolbar's panel never becomes the key window.
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true; updateLook() }
+    override func mouseExited(with event: NSEvent) { hovered = false; updateLook() }
+
+    func updateLook() {
+        contentTintColor = statusTint ?? (hovered ? .controlAccentColor : restingTint)
+        wantsLayer = true
+        guard let layer else { return }
+        layer.cornerRadius = 6 * scale
+        layer.masksToBounds = false
+        layer.backgroundColor = hovered ? NSColor.controlAccentColor.withAlphaComponent(0.16).cgColor : nil
+        layer.borderWidth = hovered ? 0.5 * scale : 0
+        layer.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.45).cgColor
+        layer.shadowColor = NSColor.black.cgColor
+        layer.shadowOpacity = hovered ? 0.25 : 0
+        layer.shadowRadius = 2 * scale
+        layer.shadowOffset = CGSize(width: 0, height: -1 * scale)
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let driver = LogosDriver()
     let queue = DispatchQueue(label: "LogosBar.driver")
@@ -392,7 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.contentView?.layer?.cornerRadius = 10 * scale
         background.layer?.cornerRadius = 10 * scale
         // A thin outline in the grip's accent color, drawn over the edges of everything inside.
-        panel.contentView?.layer?.borderWidth = docked ? 0 : 1 * scale
+        panel.contentView?.layer?.borderWidth = docked ? 0 : 1.5 * scale
         panel.contentView?.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.6).cgColor
         // Floating, the grip strip takes the leading edge (the top when vertical); leave room for it.
         let horizontal = stack.orientation == .horizontal
@@ -409,7 +444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for (index, action) in visibleActions.enumerated() {
             let image = NSImage(systemSymbolName: action.symbol, accessibilityDescription: action.label)
                 ?? NSImage(systemSymbolName: "questionmark.square", accessibilityDescription: action.label)!
-            let button = NSButton(image: image, target: self, action: #selector(runAction(_:)))
+            let button = HoverButton(image: image, target: self, action: #selector(runAction(_:)))
             button.tag = index
             button.isBordered = false
             button.bezelStyle = .regularSquare
@@ -417,7 +452,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Monochrome keeps layered symbols (like the visual-filters circles) fully opaque.
             button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: docked ? 14 : 17 * scale, weight: .regular)
                 .applying(.preferringMonochrome())
-            button.contentTintColor = self.iconColor
+            button.scale = scale
+            button.restingTint = self.iconColor
             button.widthAnchor.constraint(equalToConstant: side).isActive = true
             button.heightAnchor.constraint(equalToConstant: side).isActive = true
             button.menu = makeMenu()
@@ -479,7 +515,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc func runAction(_ sender: NSButton) {
+    @objc func runAction(_ sender: HoverButton) {
         let actions = visibleActions
         guard !busy, actions.indices.contains(sender.tag) else { return }
         var action = actions[sender.tag]
@@ -488,7 +524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action.steps = steps
         }
         busy = true
-        sender.contentTintColor = .controlAccentColor
+        sender.statusTint = .controlAccentColor
         let collapseRibbon = prefs.collapseRibbon
         queue.async { [driver] in
             var failure: String?
@@ -498,14 +534,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let failure {
                     log("\(action.id): \(failure)")
                     NSSound.beep()
-                    sender.contentTintColor = .systemRed
+                    sender.statusTint = .systemRed
                     sender.toolTip = "\(action.label)\n⚠︎ \(failure)"
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        sender.contentTintColor = self.iconColor
+                        sender.statusTint = nil
                     }
                 } else {
                     log("\(action.id): ok")
-                    sender.contentTintColor = self.iconColor
+                    sender.statusTint = nil
                     sender.toolTip = action.label
                 }
             }
@@ -619,7 +655,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let arguments = CommandLine.arguments
         guard let flag = arguments.firstIndex(of: "--run"), flag + 1 < arguments.count,
               let index = visibleActions.firstIndex(where: { $0.id == arguments[flag + 1] }),
-              let button = stack.arrangedSubviews.compactMap({ $0 as? NSButton }).first(where: { $0.tag == index }) else { return }
+              let button = stack.arrangedSubviews.compactMap({ $0 as? HoverButton }).first(where: { $0.tag == index }) else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.runAction(button) }
     }
 }

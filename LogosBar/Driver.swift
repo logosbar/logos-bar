@@ -115,18 +115,20 @@ final class LogosDriver {
     // MARK: Panels
 
     /// Each panel shows up as a tab strip (scroll area), then the ribbon (a group directly under
-    /// it, same width), then the panel's content.
+    /// it, same width), then the panel's content. When a panel's tabs overflow, the strip's scroll
+    /// arrows (buttons and their images) sit between the strip and the ribbon.
     func panels() throws -> [Panel] {
         var found: [Panel] = []
         func walk(_ element: AXUIElement) {
             let kids = children(element)
-            for (i, kid) in kids.enumerated() where i + 1 < kids.count && role(kid) == "AXScrollArea" {
-                let next = kids[i + 1]
+            for (i, kid) in kids.enumerated() where role(kid) == "AXScrollArea" {
+                guard let r = kids[(i + 1)...].firstIndex(where: { !["AXButton", "AXImage"].contains(role($0)) }) else { continue }
+                let next = kids[r]
                 guard role(next) == "AXGroup", let strip = frame(kid), let ribbon = frame(next),
                       abs(strip.minX - ribbon.minX) < 2, abs(strip.width - ribbon.width) < 2,
                       abs(strip.maxY - ribbon.minY) < 2 else { continue }
                 var area = strip.union(ribbon)
-                if i + 2 < kids.count, let content = frame(kids[i + 2]), abs(content.minX - ribbon.minX) < 2 {
+                if r + 1 < kids.count, let content = frame(kids[r + 1]), abs(content.minX - ribbon.minX) < 2 {
                     area = area.union(content)
                 }
                 found.append(Panel(ribbon: ribbon, area: area))
@@ -153,11 +155,14 @@ final class LogosDriver {
         return found
     }
 
-    /// The panel Logos treats as active: the one holding keyboard focus, else the one last clicked.
+    /// The panel Logos treats as active: the one whose tab carries the orange strip, else the one
+    /// holding keyboard focus, else the one last clicked. Focus and clicks can point at another
+    /// panel (focus can sit outside every panel), so the strip goes first.
     func activePanel() throws -> Panel {
         let all = try panels()
         guard !all.isEmpty else { throw DriverError("Couldn't find any Logos panels.") }
         var points: [CGPoint] = []
+        if let strip = try? activeTabStrip() { points.append(CGPoint(x: strip.orange.midX, y: strip.orange.maxY)) }
         if let focused: AXUIElement = attr(app, "AXFocusedUIElement"), let rect = frame(focused), rect.width < 5000 {
             points.append(CGPoint(x: rect.midX, y: rect.midY))
         }

@@ -59,7 +59,7 @@ let defaultActions: [Action] = [
            steps: [Step(tab: "Formatting", press: "Markers"), Step(menuItem: "Page numbers"),
                    Step(keys: "escape", wait: 0.15)]),
     Action(id: "contents", label: "Toggle table of contents", symbol: "list.bullet.indent",
-           steps: [Step(tab: "Home", press: "Contents")]),
+           steps: [Step(keys: "shift+cmd+c")]),
     Action(id: "find", label: "Find in this panel", symbol: "magnifyingglass",
            steps: [Step(keys: "cmd+f")]),
     Action(id: "visualFilters", label: "Toggle visual filters", symbol: "camera.filters",
@@ -71,7 +71,7 @@ let defaultActions: [Action] = [
     Action(id: "interlinear", label: "Toggle interlinear", symbol: "character.textbox",
            steps: [Step(keys: "cmd+i")]),
     Action(id: "copyVerses", label: "Copy Bible Verses", symbol: "doc.on.doc",
-           steps: [Step(go: "Copy Bible Verses")]),
+           steps: [Step(keys: "opt+cmd+b")]),
     Action(id: "layouts", label: "Save or open a layout", symbol: "rectangle.3.group",
            steps: [Step(layoutPrompt: true)]),
 ]

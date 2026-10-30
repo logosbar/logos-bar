@@ -132,7 +132,7 @@ struct SettingsView: View {
             } header: {
                 Text("Logos toolbar")
             } footer: {
-                Text("When a button has to open a row of Logos’s toolbar (for page numbers, contents or visual filters), close it again afterwards. A row you opened yourself is left open.")
+                Text("When a button has to open a row of Logos’s toolbar (for page numbers or visual filters), close it again afterwards. A row you opened yourself is left open.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

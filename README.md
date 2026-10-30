@@ -7,12 +7,12 @@ you're working in, or sit in the menu bar just after Logos's **Help** menu.
 | Button | What it does in Logos |
 |---|---|
 | Page numbers | Formatting → Markers → "Page numbers" |
-| Table of contents | Home → Contents |
+| Table of contents | ⇧⌘C |
 | Find in this panel | ⌘F |
 | Visual filters | Formatting → Visual Filters → "Show Visual Filters" |
 | Parallel text | ⇧⌘M |
 | Interlinear | ⌘I (inline reverse interlinear) |
-| Copy Bible Verses | Types "Copy Bible Verses" into the Go box |
+| Copy Bible Verses | ⌥⌘B (opens the tool in a floating window) |
 | Layouts | Drops down a menu: save the open panels as a layout, open one of your most recently saved layouts, or open any other saved layout, through the sidebar's Layouts menu |
 
 Buttons act on the Logos panel you last clicked in.
@@ -33,7 +33,7 @@ LogosBar needs two permissions in System Settings → Privacy & Security:
 
 - **Accessibility**: to find Logos's panels and menus, press keys and click.
 - **Screen & System Audio Recording**: to read the words on Logos's ribbon and Layouts menu (Page
-  numbers, Table of contents, Visual filters, Layouts) and to find the active panel's tab for the
+  numbers, Visual filters, Layouts) and to find the active panel's tab for the
   "above the active panel" placement.
 
 macOS ties these permissions to the app's signature. `build.sh` signs with a self-signed

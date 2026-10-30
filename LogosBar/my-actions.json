@@ -4,8 +4,7 @@
     "label" : "Toggle table of contents",
     "steps" : [
       {
-        "press" : "Contents",
-        "tab" : "Home"
+        "keys" : "shift+cmd+c"
       }
     ],
     "symbol" : "list.bullet.indent"
@@ -82,7 +81,7 @@
     "label" : "Copy Bible Verses",
     "steps" : [
       {
-        "go" : "Copy Bible Verses"
+        "keys" : "opt+cmd+b"
       }
     ],
     "symbol" : "doc.on.doc"

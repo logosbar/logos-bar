@@ -313,10 +313,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let point = CGPoint(x: location.x, y: screenHeight - location.y)
             self?.queue.async { self?.driver.lastClickInLogos = point }
             // A click may have made another panel active; give Logos a moment to move its orange strip.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self?.followActivePanel() }
+            // It may also have opened or closed one of Logos's dropdowns, which the toolbar steps around.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self?.followActivePanel(); self?.keepFloatingClear() }
         }
         // Keyboard and menu commands can switch panels too, so keep checking while Logos is in front.
-        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.followActivePanel() }
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.followActivePanel()
+            self?.keepFloatingClear()
+        }
         updateVisibility()
         if CommandLine.arguments.contains("--dump") { saveUIMap() }
         if CommandLine.arguments.contains("--settings") {
@@ -512,12 +516,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         origin.y = primary.frame.maxY - (header?.contentTop ?? found.tabRow.maxY) - size.height
                     }
                 }
+                let tab = NSPoint(x: found.orange.midX, y: primary.frame.maxY - found.orange.midY)
+                origin = self.clearOfDropdowns(NSRect(origin: origin, size: size), besidesWindowAt: tab).origin
                 guard origin != self.panel.frame.origin else { return }
                 self.positioning = true
                 self.panel.setFrameOrigin(origin)
                 self.positioning = false
             }
         }
+    }
+
+    /// Moves the floating toolbar off any Logos dropdown that covers its spot, and back once it closes.
+    func keepFloatingClear() {
+        guard placement == .floating, panel.isVisible else { return }
+        let topLeft = savedFloatingTopLeft()
+        let size = panel.frame.size
+        let home = NSRect(x: topLeft.x, y: topLeft.y - size.height, width: size.width, height: size.height)
+        let origin = clearOfDropdowns(home).origin
+        guard origin != panel.frame.origin else { return }
+        positioning = true
+        panel.setFrameOrigin(origin)
+        positioning = false
+    }
+
+    /// Logos opens its ribbon dropdowns (Emphasize, Markers, …) as small borderless windows of their own,
+    /// level with its panels. Returns their frames in AppKit coordinates. Logos marks them no differently
+    /// from its panel windows, so anything under a tenth of the main window's size counts, except the
+    /// window holding `point` (the toolbar's own panel).
+    func logosDropdownFrames(besidesWindowAt point: NSPoint?) -> [NSRect] {
+        guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: logosBundleID).first?.processIdentifier,
+              let primary = NSScreen.screens.first,
+              let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+        else { return [] }
+        let frames: [NSRect] = list.compactMap { info in
+            guard info[kCGWindowOwnerPID as String] as? pid_t == pid, info[kCGWindowLayer as String] as? Int == 0,
+                  (info[kCGWindowAlpha as String] as? Double ?? 1) > 0,
+                  let bounds = info[kCGWindowBounds as String] as? NSDictionary,
+                  let rect = CGRect(dictionaryRepresentation: bounds) else { return nil }
+            return NSRect(x: rect.minX, y: primary.frame.maxY - rect.maxY, width: rect.width, height: rect.height)
+        }
+        let largest = frames.map { $0.width * $0.height }.max() ?? 0
+        return frames.filter { frame in
+            frame.width > 50 && frame.height > 50 && frame.width * frame.height < largest / 10
+                && !(point.map(frame.contains) ?? false)
+        }
+    }
+
+    /// Where the toolbar should go instead of `frame` so it hides no Logos dropdown: beside the
+    /// dropdown, else below it, else above it. Stays at `frame` when nothing is in the way.
+    func clearOfDropdowns(_ frame: NSRect, besidesWindowAt point: NSPoint? = nil) -> NSRect {
+        let dropdowns = logosDropdownFrames(besidesWindowAt: point)
+        guard let dropdown = dropdowns.first(where: { $0.intersects(frame) }) else { return frame }
+        let gap: CGFloat = 8
+        let visible = (NSScreen.screens.first { $0.frame.intersects(dropdown) } ?? NSScreen.main)?.visibleFrame ?? frame
+        let spots = [
+            NSPoint(x: dropdown.maxX + gap, y: frame.minY),
+            NSPoint(x: dropdown.minX - gap - frame.width, y: frame.minY),
+            NSPoint(x: frame.minX, y: dropdown.minY - gap - frame.height),
+            NSPoint(x: frame.minX, y: dropdown.maxY + gap),
+        ]
+        for spot in spots {
+            let moved = NSRect(origin: spot, size: frame.size)
+            if visible.contains(moved), !dropdowns.contains(where: { $0.intersects(moved) }) { return moved }
+        }
+        return frame
     }
 
     func rebuildButtons() {

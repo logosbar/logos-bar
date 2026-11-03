@@ -14,6 +14,11 @@ enum DockedStyle: String {
     case dark, light
 }
 
+/// Where the Copy quote button puts its quote: on the clipboard, or also pasted into the note open in Obsidian.
+enum QuoteDestination: String {
+    case clipboard, obsidian
+}
+
 /// How big the floating toolbar is drawn. The docked bar always fits the menu bar.
 enum ToolbarSize: String, CaseIterable {
     case standard, large, giant
@@ -61,6 +66,9 @@ final class Preferences: ObservableObject {
     @Published var recentLayoutCount: Int {
         didSet { defaults.set(recentLayoutCount, forKey: "recentLayoutCount") }
     }
+    @Published var quoteDestination: QuoteDestination {
+        didSet { defaults.set(quoteDestination.rawValue, forKey: "quoteDestination") }
+    }
     @Published var onlyWithLogos: Bool {
         didSet { defaults.set(!onlyWithLogos, forKey: "alwaysVisible"); changed() }
     }
@@ -77,6 +85,7 @@ final class Preferences: ObservableObject {
         collapseRibbon = defaults.object(forKey: "collapseRibbon") as? Bool ?? true
         onlyWithLogos = !defaults.bool(forKey: "alwaysVisible")
         recentLayoutCount = defaults.object(forKey: "recentLayoutCount") as? Int ?? 3
+        quoteDestination = QuoteDestination(rawValue: defaults.string(forKey: "quoteDestination") ?? "") ?? .clipboard
         actions = loadActions()
     }
 
@@ -145,6 +154,20 @@ struct SettingsView: View {
                 Text("Layouts button")
             } footer: {
                 Text("The layouts you saved most recently in Logos, listed in the Layouts button’s menu between Save Current Layout and Open Other Layout.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker("Quote goes to", selection: $prefs.quoteDestination) {
+                    Text("The clipboard").tag(QuoteDestination.clipboard)
+                    Text("The note open in Obsidian").tag(QuoteDestination.obsidian)
+                }
+                .pickerStyle(.radioGroup)
+            } header: {
+                Text("Copy quote button")
+            } footer: {
+                Text("Copies the selection with a short citation: author, title, series and page. In Obsidian it’s pasted where the cursor is in the open note, then Logos comes back to the front; it stays on the clipboard too.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

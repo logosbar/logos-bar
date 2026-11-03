@@ -550,7 +550,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         busy = true
         sender.statusTint = .controlAccentColor
         let collapseRibbon = prefs.collapseRibbon
+        let quoteDestination = prefs.quoteDestination
         queue.async { [driver] in
+            driver.quoteDestination = quoteDestination
             var failure: String?
             do { try driver.run(action, collapseRibbon: collapseRibbon) } catch { failure = "\(error)" }
             DispatchQueue.main.async {

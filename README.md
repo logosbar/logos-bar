@@ -90,6 +90,8 @@ Right-click any LogosBar icon → **Settings…**:
   Large 1.5×, Giant 2×), and whether it shows only while Logos is in front. Drag the tinted handle
   to move it; near the active panel LogosBar places it, so there's no handle.
 - **Logos toolbar**: close the ribbon row again after a button had to open it.
+- **Copy quote button**: put the quote on the clipboard (the default), or also paste it at the
+  cursor in the note open in Obsidian, then bring Logos back to the front.
 - **Buttons**: tick to show, drag to reorder.
 
 Where things are stored:
@@ -121,7 +123,8 @@ list of `steps`. A step can have:
 Logos copies a selection with its full citation after it (with "copy with citation" on in Logos's
 settings): author, linked title, editor, series, publisher, year and page. The Copy quote button
 keeps the author, the title with its link back to the copied spot, the series, and the page, which
-gets the same link, and puts the result on the clipboard as Markdown, ready to paste anywhere:
+gets the same link, and puts the result on the clipboard as Markdown, ready to paste anywhere (or, if
+Settings says so, pastes it into the note open in Obsidian):
 
 ```
 "No strong break separates this new section …" (Douglas J. Moo, [_Hebrews_](https://ref.ly/…), Zondervan Exegetical Commentary on the New Testament, [421](https://ref.ly/…)).

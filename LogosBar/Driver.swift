@@ -29,6 +29,7 @@ final class LogosDriver {
     private var preparedPID: pid_t = 0
     private var app: AXUIElement!
     var lastClickInLogos: CGPoint?   // top-left-origin screen coordinates
+    var quoteDestination = QuoteDestination.clipboard
 
     var logos: NSRunningApplication? {
         NSRunningApplication.runningApplications(withBundleIdentifier: logosBundleID).first
@@ -353,7 +354,8 @@ final class LogosDriver {
         "escape": 53, "left": 123, "right": 124, "down": 125, "up": 126,
     ]
 
-    func sendKeys(_ combo: String) throws {
+    /// Sends a keystroke to Logos, or with `toLogos` false, to whichever app is in front.
+    func sendKeys(_ combo: String, toLogos: Bool = true) throws {
         var flags: CGEventFlags = []
         var key: CGKeyCode?
         for part in combo.lowercased().split(separator: "+").map(String.init) {
@@ -366,7 +368,7 @@ final class LogosDriver {
             }
         }
         guard let key else { throw DriverError("Unknown key in “\(combo)”.") }
-        activateLogos()
+        if toLogos { activateLogos() }
         for down in [true, false] {
             let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down)
             event?.flags = flags
@@ -476,7 +478,8 @@ final class LogosDriver {
         try sendKeys("return")
     }
 
-    /// Copies the selection with ⌘C and replaces it on the clipboard with a short Markdown quote.
+    /// Copies the selection with ⌘C and replaces it on the clipboard with a short Markdown quote,
+    /// then, if Settings asks for it, pastes it into the note open in Obsidian.
     func copyQuote() throws {
         let pasteboard = NSPasteboard.general
         let before = pasteboard.changeCount
@@ -490,6 +493,21 @@ final class LogosDriver {
         }
         pasteboard.clearContents()
         pasteboard.setString(quote, forType: .string)
+        if quoteDestination == .obsidian { try pasteInObsidian() }
+    }
+
+    /// Pastes the clipboard at the cursor in Obsidian's open note, then brings Logos back.
+    func pasteInObsidian() throws {
+        guard let obsidian = NSRunningApplication.runningApplications(withBundleIdentifier: "md.obsidian").first else {
+            throw DriverError("Obsidian isn't open. The quote is on the clipboard.")
+        }
+        obsidian.activate()
+        for _ in 0..<40 where !obsidian.isActive { usleep(25_000) }
+        guard obsidian.isActive else { throw DriverError("Obsidian didn't come to the front. The quote is on the clipboard.") }
+        usleep(150_000)
+        try sendKeys("cmd+v", toLogos: false)
+        usleep(200_000)
+        activateLogos()
     }
 
     /// The name of the layout Logos is using, from its window title (“Logos Max - Hebrews Study”).

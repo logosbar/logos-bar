@@ -264,17 +264,29 @@ final class LogosDriver {
         throw DriverError("Couldn't see the orange strip on the active panel's tab.")
     }
 
-    /// Where the content of the panel whose tabs are `strip` begins: below whatever sits between its
-    /// tabs and its content, such as a guide's input box or a resource's ribbon. That's the first
-    /// tall sibling after the strip that spans the panel's width.
-    func contentTop(below strip: CGRect) throws -> CGFloat? {
-        var result: CGFloat?
+    /// What sits between the tabs `strip` of a panel and its content: where the content begins (below
+    /// a guide's input box or a resource's ribbon), and the panel's input box with the free space to
+    /// its right, up to the next control on its row (such as a guide's Add button). The content is
+    /// the first tall sibling after the strip that spans the panel's width.
+    func header(below strip: CGRect) throws -> (contentTop: CGFloat, input: CGRect?, roomRight: CGFloat)? {
+        var result: (contentTop: CGFloat, input: CGRect?, roomRight: CGFloat)?
         func walk(_ element: AXUIElement) {
             let kids = children(element)
             if let i = kids.firstIndex(where: { role($0) == "AXScrollArea" && frame($0) == strip }) {
-                result = kids[(i + 1)...].lazy.compactMap(frame).first {
-                    abs($0.minX - strip.minX) < 2 && abs($0.width - strip.width) < 2 && $0.height > 100
-                }?.minY
+                let after = kids[(i + 1)...].compactMap { kid in frame(kid).map { (kid, $0) } }
+                guard let content = after.first(where: {
+                    abs($0.1.minX - strip.minX) < 2 && abs($0.1.width - strip.width) < 2 && $0.1.height > 100
+                })?.1 else { return }
+                let between = after.map(\.1).filter {
+                    $0.minY >= strip.maxY - 1 && $0.maxY <= content.minY + 1 && $0.width > 0 && $0.height > 0
+                        && $0.minX >= strip.minX - 1 && $0.maxX <= strip.maxX + 1
+                }
+                let input = after.first { role($0.0) == "AXTextField" && between.contains($0.1) }?.1
+                let roomRight = input.map { input in
+                    between.filter { $0.minX >= input.maxX && $0.minY < input.maxY && $0.maxY > input.minY }
+                        .map(\.minX).min() ?? strip.maxX
+                } ?? strip.maxX
+                result = (content.minY, input, roomRight)
                 return
             }
             for kid in kids where result == nil { walk(kid) }

@@ -81,8 +81,9 @@ Right-click any LogosBar icon → **Settings…**:
 
 - **Placement**: floating toolbar, in the menu bar after Help, or floating near the active Logos
   panel. The last follows the orange strip on the active panel's tab as you switch panels. When a
-  panel's tabs are at the top of the screen, with no room above, it sits at the top of that panel's
-  content instead, below its tabs and anything under them (a guide's input box, a ribbon).
+  panel's tabs are at the top of the screen, with no room above, it sits to the right of that panel's
+  input box (as on a guide), or, for panels without one, at the top of the panel's content, below its
+  tabs and ribbon.
 - **In the menu bar**: dark pill with white icons, or light pill with dark icons.
 - **Floating toolbar** (also used near the active panel): horizontal or vertical, size (Default,
   Large 1.5×, Giant 2×), and whether it shows only while Logos is in front. Drag the tinted handle

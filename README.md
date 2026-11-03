@@ -20,13 +20,16 @@ Buttons act on the Logos panel you last clicked in.
 
 ## Building
 
+New to LogosBar? Follow [INSTALL.md](INSTALL.md), which covers the certificate and permissions step
+by step. To rebuild an existing setup:
+
 ```bash
 cd LogosBar
 ./build.sh
 ```
 
-This compiles the app and installs it as `~/Applications/LogosBar.app`, replacing and restarting
-any running copy. It needs Apple's command-line tools (`xcode-select --install`).
+This compiles the app and installs it as `~/Applications/LogosBar.app`, quitting and replacing
+any running copy (open it again afterwards). It needs Apple's command-line tools (`xcode-select --install`).
 
 ## Permissions and the signing certificate
 

@@ -8,7 +8,7 @@ you're working in, or sit in the menu bar just after Logos's **Help** menu.
 |---|---|
 | Page numbers | Formatting → Markers → "Page numbers" |
 | Table of contents | ⇧⌘C |
-| Find in this panel | ⌘F |
+| Inline Search | ⇧⌘F shows it; when it's showing, clicking the panel's Search tab hides it (⇧⌘F only shows) |
 | Visual filters | Formatting → Visual Filters → "Show Visual Filters" |
 | Parallel text | ⇧⌘M |
 | Interlinear | ⌘I (inline reverse interlinear) |
@@ -34,7 +34,7 @@ LogosBar needs two permissions in System Settings → Privacy & Security:
 
 - **Accessibility**: to find Logos's panels and menus, press keys and click.
 - **Screen & System Audio Recording**: to read the words on Logos's ribbon and Layouts menu (Page
-  numbers, Visual filters, Layouts) and to find the active panel's tab for the
+  numbers, Visual filters, Inline Search, Layouts) and to find the active panel's tab for the
   "near the active panel" placement.
 
 macOS ties these permissions to the app's signature. `build.sh` signs with a self-signed
@@ -117,6 +117,7 @@ list of `steps`. A step can have:
 - `layout`: open the saved layout with this name.
 - `saveLayout`: save the open panels as a layout with this name.
 - `copyQuote`: copy the selection and keep only the citation's author, title, series and page.
+- `inlineSearch`: show Inline Search in the active panel, or hide it if it's showing.
 
 ### Copy quote
 

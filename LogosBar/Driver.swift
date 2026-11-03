@@ -400,6 +400,7 @@ final class LogosDriver {
         // Only steps that read the ribbon need Screen Recording; shortcuts and the Go box don't.
         let readsScreen = action.steps.contains {
             $0.press != nil || $0.tab != nil || $0.menuItem != nil || $0.layout != nil || $0.saveLayout != nil
+                || $0.inlineSearch != nil
         }
         try readsScreen ? prepare() : prepareAccessibility()
         activateLogos()
@@ -417,6 +418,7 @@ final class LogosDriver {
             if let name = step.layout { try openLayout(name) }
             if let name = step.saveLayout { try saveLayout(name) }
             if step.copyQuote == true { try copyQuote() }
+            if step.inlineSearch == true { try toggleInlineSearch() }
         }
         if collapseRibbon, startedCollapsed, let tab = openedTab {
             Thread.sleep(forTimeInterval: 0.2)
@@ -446,6 +448,23 @@ final class LogosDriver {
         }
         openedTab = tab
         press(hit)
+    }
+
+    /// ⇧⌘F shows Inline Search but doesn't hide it, so when its row (search kind, box and range)
+    /// is showing, click the Search tab instead: clicking the selected tab closes its row.
+    func toggleInlineSearch() throws {
+        let panel = try activePanel()
+        let showing = panel.buttonRow.map { row in
+            let text = visibleText(in: row)
+            return ["Precise", "All Bible Text", "All Text"].contains { text.localizedCaseInsensitiveContains($0) }
+        } ?? false
+        guard showing else { return try sendKeys("shift+cmd+f") }
+        // OCR can misread the selected tab ("Seach"); it always sits between Home and Notes.
+        if let hit = try locate("Search", in: panel.tabRow) { return press(hit) }
+        guard let home = try locate("Home", in: panel.tabRow), let notes = try locate("Notes", in: panel.tabRow) else {
+            throw DriverError("Couldn't see the Search tab. Tab row shows: \(visibleText(in: panel.tabRow))")
+        }
+        press(CGRect(x: home.maxX, y: home.minY, width: notes.minX - home.maxX, height: home.height))
     }
 
     func press(_ rect: CGRect) {

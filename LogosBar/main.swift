@@ -40,6 +40,7 @@ struct Step: Codable {
     var layout: String?     // saved layout to open, by name
     var saveLayout: String? // name to save the current panels under
     var copyQuote: Bool?    // copy the selection, keeping only the citation's author, title and page
+    var inlineSearch: Bool? // show Inline Search in the active panel, or hide it if it's showing
 }
 
 struct Action: Codable, Identifiable {
@@ -61,8 +62,8 @@ let defaultActions: [Action] = [
                    Step(keys: "escape", wait: 0.15)]),
     Action(id: "contents", label: "Toggle table of contents", symbol: "list.bullet.indent",
            steps: [Step(keys: "shift+cmd+c")]),
-    Action(id: "find", label: "Find in this panel", symbol: "magnifyingglass",
-           steps: [Step(keys: "cmd+f")]),
+    Action(id: "find", label: "Inline Search", symbol: "magnifyingglass",
+           steps: [Step(inlineSearch: true)]),
     Action(id: "visualFilters", label: "Toggle visual filters", symbol: "camera.filters",
            steps: [Step(tab: "Formatting", press: "Visual Filters"), Step(menuItem: "Show Visual Filters"),
                    Step(keys: "escape", wait: 0.15)]),
@@ -92,6 +93,13 @@ func loadActions() -> [Action] {
     }
     do {
         var actions = try JSONDecoder().decode([Action].self, from: Data(contentsOf: actionsURL))
+        // "Find in this panel" (⌘F) became the Inline Search toggle; update it unless it was edited.
+        if let i = actions.firstIndex(where: { $0.id == "find" && $0.label == "Find in this panel" }),
+           let inlineSearch = defaultActions.first(where: { $0.id == "find" }) {
+            actions[i].label = inlineSearch.label
+            actions[i].steps = inlineSearch.steps
+            saveActions(actions)
+        }
         // Buttons added in later versions join the end of an existing actions.json.
         let missing = defaultActions.filter { action in !actions.contains { $0.id == action.id } }
         if !missing.isEmpty {

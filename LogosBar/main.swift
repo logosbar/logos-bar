@@ -39,6 +39,7 @@ struct Step: Codable {
     var layoutPrompt: Bool? // ask whether to save the current layout or open one, then do it
     var layout: String?     // saved layout to open, by name
     var saveLayout: String? // name to save the current panels under
+    var copyQuote: Bool?    // copy the selection, keeping only the citation's author, title and page
 }
 
 struct Action: Codable, Identifiable {
@@ -72,6 +73,8 @@ let defaultActions: [Action] = [
            steps: [Step(keys: "cmd+i")]),
     Action(id: "copyVerses", label: "Copy Bible Verses", symbol: "doc.on.doc",
            steps: [Step(keys: "opt+cmd+b")]),
+    Action(id: "copyQuote", label: "Copy quote with short citation", symbol: "text.quote",
+           steps: [Step(copyQuote: true)]),
     Action(id: "layouts", label: "Save or open a layout", symbol: "rectangle.3.group",
            steps: [Step(layoutPrompt: true)]),
 ]

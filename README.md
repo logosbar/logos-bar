@@ -13,6 +13,7 @@ you're working in, or sit in the menu bar just after Logos's **Help** menu.
 | Parallel text | ⇧⌘M |
 | Interlinear | ⌘I (inline reverse interlinear) |
 | Copy Bible Verses | ⌥⌘B (opens the tool in a floating window) |
+| Copy quote | Copies the selection (⌘C) and rewrites it on the clipboard as a short quote: `"text" (Author, [_Title_](link), Series, [page](link)).` |
 | Layouts | Drops down a menu: save the open panels as a layout, open one of your most recently saved layouts, or open any other saved layout, through the sidebar's Layouts menu |
 
 Buttons act on the Logos panel you last clicked in.
@@ -113,6 +114,23 @@ list of `steps`. A step can have:
 - `layoutPrompt`: show the Layouts menu (used by the Layouts button).
 - `layout`: open the saved layout with this name.
 - `saveLayout`: save the open panels as a layout with this name.
+- `copyQuote`: copy the selection and keep only the citation's author, title, series and page.
+
+### Copy quote
+
+Logos copies a selection with its full citation after it (with "copy with citation" on in Logos's
+settings): author, linked title, editor, series, publisher, year and page. The Copy quote button
+keeps the author, the title with its link back to the copied spot, the series, and the page, which
+gets the same link, and puts the result on the clipboard as Markdown, ready to paste anywhere:
+
+```
+"No strong break separates this new section …" (Douglas J. Moo, [_Hebrews_](https://ref.ly/…), Zondervan Exegetical Commentary on the New Testament, [421](https://ref.ly/…)).
+```
+
+The series is the last part before the publication details in parentheses; a book without one
+(where that part is an editor, translator, volume or edition) gets none. A citation that doesn't
+end in a page number loses the page. If the copied text has no Logos
+citation, the clipboard is left as Logos copied it, and the log lists what was on it.
 
 ### Layouts
 
@@ -146,6 +164,7 @@ To follow the active panel, LogosBar looks along the top of each panel's tab row
 strip Logos draws on the active tab.
 
 - `LogosBar/main.swift`: the toolbar window, its placement and look, and the action recipes.
+- `LogosBar/Quote.swift`: shortening a copied citation.
 - `LogosBar/Driver.swift`: finding Logos's panels, reading the ribbon, and clicking and typing.
 - `LogosBar/Settings.swift`: the stored preferences and the Settings window.
 - `LogosBar/build.sh`: build, sign and install.

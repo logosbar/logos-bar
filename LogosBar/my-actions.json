@@ -85,5 +85,25 @@
       }
     ],
     "symbol" : "doc.on.doc"
+  },
+  {
+    "id" : "layouts",
+    "label" : "Save or open a layout",
+    "steps" : [
+      {
+        "layoutPrompt" : true
+      }
+    ],
+    "symbol" : "rectangle.3.group"
+  },
+  {
+    "id" : "copyQuote",
+    "label" : "Copy quote with short citation",
+    "steps" : [
+      {
+        "copyQuote" : true
+      }
+    ],
+    "symbol" : "text.quote"
   }
 ]

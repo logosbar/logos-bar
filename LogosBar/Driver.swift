@@ -414,6 +414,7 @@ final class LogosDriver {
             if let text = step.go { try runInGoBox(text) }
             if let name = step.layout { try openLayout(name) }
             if let name = step.saveLayout { try saveLayout(name) }
+            if step.copyQuote == true { try copyQuote() }
         }
         if collapseRibbon, startedCollapsed, let tab = openedTab {
             Thread.sleep(forTimeInterval: 0.2)
@@ -473,6 +474,22 @@ final class LogosDriver {
         typeText(text)
         Thread.sleep(forTimeInterval: 1.0)   // let Logos fill in its suggestions
         try sendKeys("return")
+    }
+
+    /// Copies the selection with ⌘C and replaces it on the clipboard with a short Markdown quote.
+    func copyQuote() throws {
+        let pasteboard = NSPasteboard.general
+        let before = pasteboard.changeCount
+        try sendKeys("cmd+c")
+        for _ in 0..<60 where pasteboard.changeCount == before { usleep(50_000) }
+        guard pasteboard.changeCount != before else { throw DriverError("Logos copied nothing. Select some text first.") }
+        usleep(150_000)   // let Logos finish writing every format
+        guard let copied = copiedRichText(on: pasteboard), let quote = shortQuote(from: copied) else {
+            log("copyQuote: clipboard has \((pasteboard.types ?? []).map(\.rawValue)): \(pasteboard.string(forType: .string)?.prefix(400) ?? "")")
+            throw DriverError("The copied text had no Logos citation, so the clipboard was left as Logos copied it.")
+        }
+        pasteboard.clearContents()
+        pasteboard.setString(quote, forType: .string)
     }
 
     /// The name of the layout Logos is using, from its window title (“Logos Max - Hebrews Study”).

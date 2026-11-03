@@ -4,6 +4,9 @@ These steps copy LogosBar from GitHub to your Mac and set it up so that Claude C
 for you: new buttons, a different look, a button that does something only you need. You describe
 the change in plain words; Claude edits the code, rebuilds the app and tests it.
 
+You're welcome to personalize LogosBar and improve it however you like. Your copy is yours to
+change, and the original stays as it is for everyone else, so you can't break it for anyone.
+
 You don't need to know Swift. You do need about twenty minutes the first time.
 
 ## What you need
@@ -149,9 +152,9 @@ resolve it with you, explaining each choice.
 
 ## Sharing an improvement back
 
-If you make something others might like, you can offer it to the original: with a fork, ask Claude
-to "open a pull request to logosbar/logos-bar with this change". The maintainer can then review it
-and add it for everyone.
+Improvements are welcome. If you make something others might like, you can offer it to the
+original: with a fork, ask Claude to "open a pull request to logosbar/logos-bar with this change".
+The maintainer can then review it and add it for everyone.
 
 ## If something goes wrong
 

@@ -143,13 +143,65 @@ final class GripView: NSView {
     }
 }
 
+/// A tooltip-style label shown under a toolbar button. AppKit's own tooltips only appear while
+/// LogosBar is the active app, and with Logos in front it never is.
+final class HintWindow: NSPanel {
+    static let shared = HintWindow()
+    private let label = NSTextField(labelWithString: "")
+
+    private init() {
+        super.init(contentRect: .zero, styleMask: [.nonactivatingPanel, .borderless], backing: .buffered, defer: true)
+        level = .popUpMenu   // above the toolbar, docked or floating
+        ignoresMouseEvents = true
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        let background = NSVisualEffectView()
+        background.material = .toolTip
+        background.state = .active
+        background.wantsLayer = true
+        background.layer?.cornerRadius = 7
+        background.layer?.masksToBounds = true
+        label.font = .systemFont(ofSize: NSFont.smallSystemFontSize * 1.5)
+        label.textColor = .labelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        background.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 10),
+            label.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -10),
+            label.topAnchor.constraint(equalTo: background.topAnchor, constant: 5),
+            label.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -5),
+        ])
+        contentView = background
+    }
+
+    /// Shows `text` centered below `view`, or above it when there's no room below.
+    func show(_ text: String, for view: NSView) {
+        guard let window = view.window, window.isVisible else { return }
+        label.stringValue = text
+        appearance = window.appearance
+        let size = contentView!.fittingSize
+        let anchor = window.convertToScreen(view.convert(view.bounds, to: nil))
+        let visible = (window.screen ?? NSScreen.main)?.visibleFrame ?? anchor
+        var origin = NSPoint(x: anchor.midX - size.width / 2, y: anchor.minY - 4 - size.height)
+        if origin.y < visible.minY { origin.y = anchor.maxY + 4 }
+        origin.x = min(max(origin.x, visible.minX + 2), visible.maxX - size.width - 2)
+        setFrame(NSRect(origin: origin, size: size), display: true)
+        orderFrontRegardless()
+    }
+}
+
 /// A toolbar button that lifts under the pointer: a raised accent-tinted tile behind an accent icon.
 final class HoverButton: NSButton {
     var restingTint: NSColor = .labelColor { didSet { updateLook() } }
     /// Overrides the icon color while the button's action runs or after it fails.
     var statusTint: NSColor? { didSet { updateLook() } }
     var scale: CGFloat = 1 { didSet { updateLook() } }
+    /// The button's name, shown in a `HintWindow` after the pointer rests on it.
+    var hint = ""
     private var hovered = false
+    private var hintTimer: Timer?
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -159,8 +211,39 @@ final class HoverButton: NSButton {
                                        owner: self, userInfo: nil))
     }
 
-    override func mouseEntered(with event: NSEvent) { hovered = true; updateLook() }
-    override func mouseExited(with event: NSEvent) { hovered = false; updateLook() }
+    override func mouseEntered(with event: NSEvent) {
+        hovered = true
+        updateLook()
+        hintTimer?.invalidate()
+        // Show at once when moving along the bar from another button's hint, as tooltips do.
+        let delay = HintWindow.shared.isVisible ? 0 : 0.5
+        hintTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            guard let self, self.hovered, !self.hint.isEmpty else { return }
+            HintWindow.shared.show(self.hint, for: self)
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hovered = false
+        updateLook()
+        hideHint()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        hideHint()
+        super.mouseDown(with: event)
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { hideHint() }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    private func hideHint() {
+        hintTimer?.invalidate()
+        hintTimer = nil
+        HintWindow.shared.orderOut(nil)
+    }
 
     func updateLook() {
         contentTintColor = statusTint ?? (hovered ? .controlAccentColor : restingTint)
@@ -462,7 +545,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.tag = index
             button.isBordered = false
             button.bezelStyle = .regularSquare
-            button.toolTip = action.label
+            button.hint = action.label
             // Monochrome keeps layered symbols (like the visual-filters circles) fully opaque.
             button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: docked ? 14 : 17 * scale, weight: .regular)
                 .applying(.preferringMonochrome())
@@ -561,14 +644,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     log("\(action.id): \(failure)")
                     NSSound.beep()
                     sender.statusTint = .systemRed
-                    sender.toolTip = "\(action.label)\n⚠︎ \(failure)"
+                    sender.hint = "\(action.label)\n⚠︎ \(failure)"
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         sender.statusTint = nil
                     }
                 } else {
                     log("\(action.id): ok")
                     sender.statusTint = nil
-                    sender.toolTip = action.label
+                    sender.hint = action.label
                 }
             }
         }

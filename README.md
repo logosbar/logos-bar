@@ -34,7 +34,7 @@ LogosBar needs two permissions in System Settings → Privacy & Security:
 - **Accessibility**: to find Logos's panels and menus, press keys and click.
 - **Screen & System Audio Recording**: to read the words on Logos's ribbon and Layouts menu (Page
   numbers, Visual filters, Layouts) and to find the active panel's tab for the
-  "above the active panel" placement.
+  "near the active panel" placement.
 
 macOS ties these permissions to the app's signature. `build.sh` signs with a self-signed
 certificate named **LogosBar Signing** in the login keychain, so rebuilds keep their permissions.
@@ -79,14 +79,14 @@ tccutil reset ScreenCapture local.logosbar
 
 Right-click any LogosBar icon → **Settings…**:
 
-- **Placement**: floating toolbar, in the menu bar after Help, or floating above the active Logos
+- **Placement**: floating toolbar, in the menu bar after Help, or floating near the active Logos
   panel. The last follows the orange strip on the active panel's tab as you switch panels. When a
-  panel's tabs are at the top of the screen, with no room above, it sits just below that panel's
-  tab row instead.
+  panel's tabs are at the top of the screen, with no room above, it sits at the top of that panel's
+  content instead, below its tabs and anything under them (a guide's input box, a ribbon).
 - **In the menu bar**: dark pill with white icons, or light pill with dark icons.
-- **Floating toolbar** (also used above the active panel): horizontal or vertical, size (Default,
+- **Floating toolbar** (also used near the active panel): horizontal or vertical, size (Default,
   Large 1.5×, Giant 2×), and whether it shows only while Logos is in front. Drag the tinted handle
-  to move it; above the active panel LogosBar places it, so there's no handle.
+  to move it; near the active panel LogosBar places it, so there's no handle.
 - **Logos toolbar**: close the ribbon row again after a button had to open it.
 - **Buttons**: tick to show, drag to reorder.
 

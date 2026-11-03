@@ -386,7 +386,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Floats the toolbar just above the orange strip on the active panel's tab, kept on screen.
+    /// Floats the toolbar just above the orange strip on the active panel's tab, kept on screen, or
+    /// at the top of the panel's content when there's no room above.
     func followActivePanel() {
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         guard placement == .abovePanel, !following, panel.isVisible,
@@ -394,9 +395,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         following = true
         queue.async { [driver] in
             let found = try? driver.activeTabStrip()
+            let contentTop = found.flatMap { try? driver.contentTop(below: $0.tabRow) } ?? found?.tabRow.maxY
             DispatchQueue.main.async {
                 self.following = false
-                guard self.placement == .abovePanel, let found, let primary = NSScreen.screens.first else { return }
+                guard self.placement == .abovePanel, let found, let contentTop, let primary = NSScreen.screens.first else { return }
                 // Convert from the top-left origin used by Accessibility to AppKit's bottom-left origin.
                 let size = self.panel.frame.size
                 var origin = NSPoint(x: found.orange.minX, y: primary.frame.maxY - found.orange.minY)
@@ -404,8 +406,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let visible = (NSScreen.screens.first { $0.frame.contains(point) } ?? primary).visibleFrame
                 origin.x = min(max(origin.x, visible.minX), visible.maxX - size.width)
                 if origin.y + size.height > visible.maxY {
-                    // A panel at the top of the screen has no room above it; hang below its tabs instead.
-                    origin.y = primary.frame.maxY - found.tabRow.maxY - size.height
+                    // A panel at the top of the screen has no room above it; hang below its tabs and
+                    // anything under them (input box, ribbon) instead, at the top of its content.
+                    origin.y = primary.frame.maxY - contentTop - size.height
                 }
                 guard origin != self.panel.frame.origin else { return }
                 self.positioning = true

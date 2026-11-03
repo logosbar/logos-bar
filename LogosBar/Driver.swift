@@ -264,6 +264,25 @@ final class LogosDriver {
         throw DriverError("Couldn't see the orange strip on the active panel's tab.")
     }
 
+    /// Where the content of the panel whose tabs are `strip` begins: below whatever sits between its
+    /// tabs and its content, such as a guide's input box or a resource's ribbon. That's the first
+    /// tall sibling after the strip that spans the panel's width.
+    func contentTop(below strip: CGRect) throws -> CGFloat? {
+        var result: CGFloat?
+        func walk(_ element: AXUIElement) {
+            let kids = children(element)
+            if let i = kids.firstIndex(where: { role($0) == "AXScrollArea" && frame($0) == strip }) {
+                result = kids[(i + 1)...].lazy.compactMap(frame).first {
+                    abs($0.minX - strip.minX) < 2 && abs($0.width - strip.width) < 2 && $0.height > 100
+                }?.minY
+                return
+            }
+            for kid in kids where result == nil { walk(kid) }
+        }
+        walk(try mainWindow())
+        return result
+    }
+
     /// The topmost long horizontal run of orange pixels in `image`.
     func orangeRun(in image: CGImage, minLength: Int) -> (row: Int, start: Int, length: Int)? {
         let width = image.width, height = image.height

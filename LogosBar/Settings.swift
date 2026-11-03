@@ -4,7 +4,7 @@ import Cocoa
 import SwiftUI
 
 /// Where the toolbar lives: floating anywhere, docked in the menu bar just after Logos's Help menu,
-/// or floating just above the orange strip on the active Logos panel's tab.
+/// or floating near the active Logos panel (above its tab, or at the top of its content).
 enum Placement: String {
     case floating, menuBar, abovePanel
 }
@@ -99,7 +99,7 @@ struct SettingsView: View {
                 Picker("Toolbar", selection: $prefs.placement) {
                     Text("Floating toolbar").tag(Placement.floating)
                     Text("In the menu bar, after Help").tag(Placement.menuBar)
-                    Text("Floating above the active Logos panel").tag(Placement.abovePanel)
+                    Text("Floating near the active Logos panel").tag(Placement.abovePanel)
                 }
                 .pickerStyle(.radioGroup)
             }

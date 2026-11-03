@@ -21,7 +21,8 @@ Buttons act on the Logos panel you last clicked in.
 ## Building
 
 New to LogosBar? Follow [INSTALL.md](INSTALL.md), which covers the certificate and permissions step
-by step. To rebuild an existing setup:
+by step. To make your own version with Claude Code, see [CUSTOMIZING.md](CUSTOMIZING.md). To
+rebuild an existing setup:
 
 ```bash
 cd LogosBar

@@ -331,11 +331,15 @@ final class LogosDriver {
         usleep(100_000)
     }
 
+    /// Where the pointer was when an action began; set while one runs, so the pointer goes back
+    /// once at the end rather than hopping back onto LogosBar's button between clicks.
+    private var pointerHome: CGPoint?
+
     /// Clicks at a screen point. `hover` keeps the pointer there first, for controls that only
     /// take a click once they've drawn their hover state.
     func click(at point: CGPoint, hover: useconds_t = 30_000) {
         activateLogos()
-        let saved = CGEvent(source: nil)?.location
+        let saved = pointerHome == nil ? CGEvent(source: nil)?.location : nil
         CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
         usleep(hover)
         for type in [CGEventType.leftMouseDown, .leftMouseUp] {
@@ -405,6 +409,11 @@ final class LogosDriver {
                 || $0.inlineSearch != nil
         }
         try readsScreen ? prepare() : prepareAccessibility()
+        pointerHome = CGEvent(source: nil)?.location
+        defer {
+            if let home = pointerHome { usleep(60_000); CGWarpMouseCursorPosition(home) }
+            pointerHome = nil
+        }
         activateLogos()
         // Only ribbon steps need the active panel; layouts work through the sidebar.
         let usesRibbon = action.steps.contains { $0.press != nil || $0.tab != nil || $0.menuItem != nil }
@@ -487,7 +496,15 @@ final class LogosDriver {
             Thread.sleep(forTimeInterval: 0.15)
             // Logos's dropdowns ignore a click that comes right after the pointer arrives
             // (the Markers dropdown's Page numbers row did nothing at 30 ms, 2026-11-04).
-            if let hit = try locate(label, in: area) { return press(hit, hover: 250_000) }
+            if let hit = try locate(label, in: area) {
+                // Coming straight down from the dropdown's own button, the click closes the
+                // dropdown without choosing anything; that's the path when the pointer starts on
+                // LogosBar's button over the ribbon. Leaving the dropdown first works (2026-11-04).
+                let away = CGPoint(x: hit.midX, y: hit.midY + 400)
+                CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: away, mouseButton: .left)?.post(tap: .cghidEventTap)
+                usleep(150_000)
+                return press(hit, hover: 250_000)
+            }
         }
         let seen = visibleText(in: area)
         try sendKeys("escape")

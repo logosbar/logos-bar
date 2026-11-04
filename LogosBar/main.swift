@@ -226,7 +226,8 @@ final class HoverButton: NSButton {
         // Show at once when moving along the bar from another button's hint, as tooltips do.
         let delay = HintWindow.shared.isVisible ? 0 : 0.5
         hintTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            guard let self, self.hovered, !self.hint.isEmpty else { return }
+            // No hint while an action runs (the bar then lets clicks through): it could close a Logos dropdown.
+            guard let self, self.hovered, !self.hint.isEmpty, self.window?.ignoresMouseEvents == false else { return }
             HintWindow.shared.show(self.hint, for: self)
         }
     }

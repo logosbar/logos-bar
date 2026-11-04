@@ -9,7 +9,6 @@ import ApplicationServices
 import ScreenCaptureKit
 import SQLite3
 import Vision
-import CoreImage
 
 struct DriverError: Error, CustomStringConvertible {
     let description: String
@@ -199,31 +198,17 @@ final class LogosDriver {
     }
 
     /// Every line of text Vision reads in `rect`, in screen coordinates.
-    /// With `enhanced`, the capture is read as enlarged high-contrast grayscale instead, which
-    /// Vision needs for Logos's highlighted buttons: once page numbers are on, Markers is drawn
-    /// in blue on a pale blue pill and Vision reads it as “80” (2026-11-04).
-    func readText(in rect: CGRect, enhanced: Bool = false) throws -> [(text: String, observation: VNRecognizedText, area: CGRect)] {
+    /// LogosBar's own bar can sit over the ribbon (above-panel placement hangs it under the tabs,
+    /// where a ribbon row opens), so it's left out of what's read.
+    func readText(in rect: CGRect) throws -> [(text: String, observation: VNRecognizedText, area: CGRect)] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = false
-        var image = try capture(rect)
-        if enhanced { image = highContrast(image) ?? image }
-        try VNImageRequestHandler(cgImage: image).perform([request])
+        try VNImageRequestHandler(cgImage: try capture(rect, hidingLogosBar: true)).perform([request])
         return (request.results ?? []).compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return nil }
             return (candidate.string, candidate, rect)
         }
-    }
-
-    private let imageContext = CIContext()
-
-    /// `image` in grayscale with its contrast raised, at twice the size.
-    func highContrast(_ image: CGImage) -> CGImage? {
-        let output = CIImage(cgImage: image)
-            .applyingFilter("CIPhotoEffectNoir")
-            .applyingFilter("CIColorControls", parameters: [kCIInputContrastKey: 1.6])
-            .applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: 2.0])
-        return imageContext.createCGImage(output, from: output.extent)
     }
 
     func screenRect(_ normalized: CGRect, in area: CGRect) -> CGRect {
@@ -242,15 +227,9 @@ final class LogosDriver {
     }
 
     /// Every place `text` appears as whole words inside `rect`, and whether it's the whole line.
-    /// When a plain read finds nothing, the area is read again enhanced (see `readText`).
     func locateAll(_ text: String, in rect: CGRect) throws -> [(rect: CGRect, whole: Bool)] {
-        let hits = try locateAll(text, in: rect, enhanced: false)
-        return hits.isEmpty ? try locateAll(text, in: rect, enhanced: true) : hits
-    }
-
-    private func locateAll(_ text: String, in rect: CGRect, enhanced: Bool) throws -> [(rect: CGRect, whole: Bool)] {
         var hits: [(rect: CGRect, whole: Bool)] = []
-        for line in try readText(in: rect, enhanced: enhanced) {
+        for line in try readText(in: rect) {
             guard let range = line.text.range(of: text, options: [.caseInsensitive, .diacriticInsensitive]) else { continue }
             // Require word boundaries so "View" doesn't match "Paged view".
             let before = range.lowerBound == line.text.startIndex ? " " : line.text[line.text.index(before: range.lowerBound)]
@@ -461,7 +440,7 @@ final class LogosDriver {
             if let row = try activePanel().buttonRow, let hit = try locate(label, in: row) { return press(hit) }
         }
         let row = (try? activePanel().buttonRow).flatMap { $0 }
-        if let row, let image = try? capture(row) {   // kept for working out why the word was missed
+        if let row, let image = try? capture(row, hidingLogosBar: true) {   // kept for working out why the word was missed
             try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
                 .write(to: supportDir.appendingPathComponent("ribbon-miss.png"))
         }

@@ -704,12 +704,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sender.statusTint = .controlAccentColor
         let collapseRibbon = prefs.collapseRibbon
         let quoteDestination = prefs.quoteDestination
+        // The bar can sit where a ribbon row or dropdown opens; let the action's clicks through to Logos.
+        panel.ignoresMouseEvents = true
         queue.async { [driver] in
             driver.quoteDestination = quoteDestination
             var failure: String?
             do { try driver.run(action, collapseRibbon: collapseRibbon) } catch { failure = "\(error)" }
             DispatchQueue.main.async {
                 self.busy = false
+                self.panel.ignoresMouseEvents = false
+                self.followActivePanel()
                 if let failure {
                     log("\(action.id): \(failure)")
                     NSSound.beep()

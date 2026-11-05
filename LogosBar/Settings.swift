@@ -99,7 +99,8 @@ final class Preferences: ObservableObject {
     }
 }
 
-struct SettingsView: View {
+/// The General tab: where the toolbar lives and how it looks there.
+struct GeneralSettings: View {
     @ObservedObject var prefs: Preferences
 
     var body: some View {
@@ -135,15 +136,24 @@ struct SettingsView: View {
                 Toggle("Show only when Logos is active", isOn: $prefs.onlyWithLogos)
             }
             .disabled(prefs.placement == .menuBar)
+        }
+        .settingsPane()
+    }
+}
 
+/// The Behavior tab: how individual buttons do their work.
+struct BehaviorSettings: View {
+    @ObservedObject var prefs: Preferences
+
+    var body: some View {
+        Form {
             Section {
                 Toggle("Collapse Logos’s toolbar after using it", isOn: $prefs.collapseRibbon)
             } header: {
                 Text("Logos toolbar")
             } footer: {
                 Text("When a button has to open a row of Logos’s toolbar (for page numbers or visual filters), close it again afterwards. A row you opened yourself is left open.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsFootnote()
             }
 
             Section {
@@ -154,8 +164,7 @@ struct SettingsView: View {
                 Text("Layouts button")
             } footer: {
                 Text("The layouts you saved most recently in Logos, listed in the Layouts button’s menu between Save Current Layout and Open Other Layout.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsFootnote()
             }
 
             Section {
@@ -168,10 +177,22 @@ struct SettingsView: View {
                 Text("Copy quote button")
             } footer: {
                 Text("Copies the selection with a short citation: author, title, series and page. In Obsidian it’s pasted where the cursor is in the open note, then Logos comes back to the front; it stays on the clipboard too.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsFootnote()
             }
+        }
+        .settingsPane()
+    }
+}
 
+/// The Buttons tab: which buttons the toolbar shows, and in what order.
+struct ButtonsSettings: View {
+    @ObservedObject var prefs: Preferences
+
+    /// Taller lists scroll, so the window still fits on a short screen.
+    private let maxListHeight: CGFloat = 420
+
+    var body: some View {
+        Form {
             Section {
                 List {
                     ForEach($prefs.actions) { $action in
@@ -191,18 +212,58 @@ struct SettingsView: View {
                     }
                     .onMove { prefs.actions.move(fromOffsets: $0, toOffset: $1) }
                 }
-                .frame(height: CGFloat(prefs.actions.count) * 30 + 12)
-            } header: {
-                Text("Buttons")
+                .frame(height: min(CGFloat(prefs.actions.count) * 30 + 12, maxListHeight))
             } footer: {
                 Text("Tick the buttons to show. Drag rows to change their order.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsFootnote()
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 440)
-        .fixedSize(horizontal: false, vertical: true)
+        .settingsPane()
+    }
+}
+
+private extension View {
+    /// Every tab is the same width and exactly as tall as its contents.
+    func settingsPane() -> some View {
+        formStyle(.grouped)
+            .frame(width: 440)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    func settingsFootnote() -> some View {
+        font(.caption).foregroundStyle(.secondary)
+    }
+}
+
+/// The Settings window's tabs, shown as icons along the top like other Mac apps' settings.
+/// The window resizes to fit each tab, and reopens on the tab used last.
+final class SettingsTabController: NSTabViewController {
+    private let defaults = UserDefaults.standard
+
+    init(prefs: Preferences) {
+        super.init(nibName: nil, bundle: nil)
+        tabStyle = .toolbar
+        add(GeneralSettings(prefs: prefs), label: "General", symbol: "gearshape")
+        add(BehaviorSettings(prefs: prefs), label: "Behavior", symbol: "slider.horizontal.3")
+        add(ButtonsSettings(prefs: prefs), label: "Buttons", symbol: "square.grid.2x2")
+        selectedTabViewItemIndex = min(max(defaults.integer(forKey: "settingsTab"), 0), tabViewItems.count - 1)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    private func add(_ view: some View, label: String, symbol: String) {
+        let host = NSHostingController(rootView: view)
+        host.sizingOptions = .preferredContentSize
+        let item = NSTabViewItem(viewController: host)
+        item.label = label
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        addTabViewItem(item)
+    }
+
+    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        super.tabView(tabView, didSelect: tabViewItem)
+        defaults.set(selectedTabViewItemIndex, forKey: "settingsTab")
+        view.window?.title = tabViewItem?.label ?? "LogosBar Settings"
     }
 }
 
@@ -217,8 +278,10 @@ final class SettingsWindowController {
 
     func show() {
         if window == nil {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(prefs: prefs)))
-            window.title = "LogosBar Settings"
+            let tabs = SettingsTabController(prefs: prefs)
+            let window = NSWindow(contentViewController: tabs)
+            window.title = tabs.tabViewItems[tabs.selectedTabViewItemIndex].label
+            window.toolbarStyle = .preference
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.center()

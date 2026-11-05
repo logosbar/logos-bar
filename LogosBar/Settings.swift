@@ -238,6 +238,7 @@ private extension View {
 /// The Settings window's tabs, shown as icons along the top like other Mac apps' settings.
 /// The window resizes to fit each tab, and reopens on the tab used last.
 final class SettingsTabController: NSTabViewController {
+    static let windowTitle = "LogosBar Settings"
     private let defaults = UserDefaults.standard
 
     init(prefs: Preferences) {
@@ -254,6 +255,8 @@ final class SettingsTabController: NSTabViewController {
     private func add(_ view: some View, label: String, symbol: String) {
         let host = NSHostingController(rootView: view)
         host.sizingOptions = .preferredContentSize
+        // The tab controller copies the chosen tab's title onto the window; without one it reads "Untitled".
+        host.title = Self.windowTitle
         let item = NSTabViewItem(viewController: host)
         item.label = label
         item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
@@ -263,7 +266,7 @@ final class SettingsTabController: NSTabViewController {
     override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
         super.tabView(tabView, didSelect: tabViewItem)
         defaults.set(selectedTabViewItemIndex, forKey: "settingsTab")
-        view.window?.title = tabViewItem?.label ?? "LogosBar Settings"
+        view.window?.title = Self.windowTitle
     }
 }
 
@@ -280,7 +283,7 @@ final class SettingsWindowController {
         if window == nil {
             let tabs = SettingsTabController(prefs: prefs)
             let window = NSWindow(contentViewController: tabs)
-            window.title = tabs.tabViewItems[tabs.selectedTabViewItemIndex].label
+            window.title = SettingsTabController.windowTitle
             window.toolbarStyle = .preference
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false

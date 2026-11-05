@@ -439,14 +439,21 @@ final class LogosDriver {
     }
 
     func pressOnRibbon(_ label: String, tab: String?) throws {
-        if let row = try activePanel().buttonRow, let hit = try locate(label, in: row) {
+        if let row = try activePanel().buttonRow, let hit = try find(label, onRibbonRow: row) {
             return press(hit)
         }
         guard let tab else { throw DriverError("Couldn't see “\(label)” on the ribbon.") }
         try openTab(tab)
-        for _ in 0..<6 {
+        var reopened = false
+        for attempt in 0..<6 {
             Thread.sleep(forTimeInterval: 0.12)
-            if let row = try activePanel().buttonRow, let hit = try locate(label, in: row) { return press(hit) }
+            guard let row = try activePanel().buttonRow else {
+                // Clicking the tab that's already showing closes its row (say a failed run left it
+                // open), so click it once more to bring the row back.
+                if attempt >= 2 && !reopened { reopened = true; try openTab(tab) }
+                continue
+            }
+            if let hit = try find(label, onRibbonRow: row) { return press(hit) }
         }
         let row = (try? activePanel().buttonRow).flatMap { $0 }
         if let row, let image = try? capture(row, hidingLogosBar: true) {   // kept for working out why the word was missed
@@ -455,6 +462,47 @@ final class LogosDriver {
         }
         let seen = row.map(visibleText) ?? "nothing"
         throw DriverError("Opened “\(tab)” but couldn't see “\(label)”. Ribbon shows: \(seen)")
+    }
+
+    /// Where `label` is on a ribbon button row. In a narrow panel Logos shows some buttons as an
+    /// icon alone, which OCR can't read; Visual Filters then is still the first button after the
+    /// Formatting row's divider (2026-11-05).
+    func find(_ label: String, onRibbonRow row: CGRect) throws -> CGRect? {
+        if let hit = try locate(label, in: row) { return hit }
+        guard label.caseInsensitiveCompare("Visual Filters") == .orderedSame else { return nil }
+        let image = try capture(row, hidingLogosBar: true)
+        guard let column = dividerColumns(in: image).first else { return nil }
+        let x = row.minX + CGFloat(column) * row.width / CGFloat(image.width)
+        // The button's ▾, about 39 pt past the divider; its icon (about 19 pt past) doesn't open the dropdown.
+        return CGRect(x: x + 31, y: row.midY - 8, width: 16, height: 16)
+    }
+
+    /// Columns of `image`, in pixels, holding a thin gray vertical line through the middle half of
+    /// its height: the dividers between groups of ribbon buttons.
+    func dividerColumns(in image: CGImage) -> [Int] {
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard width > 8, let context = CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8,
+                                                 bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return [] }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        func brightness(_ x: Int, _ y: Int) -> Int {
+            let i = (y * width + x) * 4
+            return (Int(pixels[i]) + Int(pixels[i + 1]) + Int(pixels[i + 2])) / 3
+        }
+        func isGray(_ x: Int, _ y: Int) -> Bool {
+            let i = (y * width + x) * 4
+            let r = Int(pixels[i]), g = Int(pixels[i + 1]), b = Int(pixels[i + 2])
+            return abs(r - g) < 12 && abs(r - b) < 12
+        }
+        let rows = (height / 4)..<(height * 3 / 4)
+        return (4..<(width - 4)).filter { x in
+            rows.allSatisfy { y in
+                let line = brightness(x, y)
+                return isGray(x, y) && (120...235).contains(line)
+                    && brightness(x - 4, y) > line + 10 && brightness(x + 4, y) > line + 10
+            }
+        }
     }
 
     func openTab(_ tab: String) throws {

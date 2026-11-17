@@ -78,6 +78,8 @@ let defaultActions: [Action] = [
            steps: [Step(copyQuote: true)]),
     Action(id: "layouts", label: "Save or open a layout", symbol: "rectangle.3.group",
            steps: [Step(layoutPrompt: true)]),
+    Action(id: "reopenTab", label: "Reopen closed tab", symbol: "arrow.uturn.backward.square",
+           steps: [Step(keys: "shift+cmd+t")]),
 ]
 
 func saveActions(_ actions: [Action]) {

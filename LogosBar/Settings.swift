@@ -20,6 +20,12 @@ enum QuoteDestination: String {
     case clipboard, obsidian
 }
 
+/// How the Copy quote button formats its quote: as Logos copied it, as a one-line quote with a
+/// short citation, or as an Obsidian callout.
+enum QuoteFormat: String {
+    case logos, simplified, callout
+}
+
 /// How big the floating toolbar is drawn. The docked bar always fits the menu bar.
 enum ToolbarSize: String, CaseIterable {
     case standard, large, giant
@@ -70,6 +76,9 @@ final class Preferences: ObservableObject {
     @Published var quoteDestination: QuoteDestination {
         didSet { defaults.set(quoteDestination.rawValue, forKey: "quoteDestination") }
     }
+    @Published var quoteFormat: QuoteFormat {
+        didSet { defaults.set(quoteFormat.rawValue, forKey: "quoteFormat") }
+    }
     @Published var onlyWithLogos: Bool {
         didSet { defaults.set(!onlyWithLogos, forKey: "alwaysVisible"); changed() }
     }
@@ -91,6 +100,7 @@ final class Preferences: ObservableObject {
         onlyWithLogos = !defaults.bool(forKey: "alwaysVisible")
         recentLayoutCount = defaults.object(forKey: "recentLayoutCount") as? Int ?? 3
         quoteDestination = QuoteDestination(rawValue: defaults.string(forKey: "quoteDestination") ?? "") ?? .clipboard
+        quoteFormat = QuoteFormat(rawValue: defaults.string(forKey: "quoteFormat") ?? "") ?? .simplified
         troubleshooting = defaults.bool(forKey: "troubleshooting")
         actions = loadActions()
     }
@@ -173,15 +183,21 @@ struct BehaviorSettings: View {
             }
 
             Section {
-                Picker("Quote goes to", selection: $prefs.quoteDestination) {
+                Picker("Copy to…", selection: $prefs.quoteDestination) {
                     Text("The clipboard").tag(QuoteDestination.clipboard)
                     Text("The note open in Obsidian").tag(QuoteDestination.obsidian)
+                }
+                .pickerStyle(.radioGroup)
+                Picker("Format", selection: $prefs.quoteFormat) {
+                    Text("Logos Default Copy").tag(QuoteFormat.logos)
+                    Text("Simplified Formatting").tag(QuoteFormat.simplified)
+                    Text("Callout Formatting for Obsidian").tag(QuoteFormat.callout)
                 }
                 .pickerStyle(.radioGroup)
             } header: {
                 Text("Copy quote button")
             } footer: {
-                Text("Copies the selection with a short citation: author, title, series and page. In Obsidian it’s pasted where the cursor is in the open note, then Logos comes back to the front; it stays on the clipboard too.")
+                Text("Logos Default Copy keeps the text and full citation exactly as Logos copies them. Simplified Formatting turns it into Markdown: the passage in quotation marks, its footnotes as Markdown footnotes, then the source with the title and page linked. Callout Formatting puts all of that in an Obsidian quote callout. In Obsidian it’s pasted where the cursor is in the open note, then Logos comes back to the front; it stays on the clipboard too.")
                     .settingsFootnote()
             }
         }

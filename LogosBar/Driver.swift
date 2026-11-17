@@ -30,6 +30,7 @@ final class LogosDriver {
     private var app: AXUIElement!
     var lastClickInLogos: CGPoint?   // top-left-origin screen coordinates
     var quoteDestination = QuoteDestination.clipboard
+    var quoteFormat = QuoteFormat.simplified
 
     var logos: NSRunningApplication? {
         NSRunningApplication.runningApplications(withBundleIdentifier: logosBundleID).first
@@ -571,8 +572,9 @@ final class LogosDriver {
         try sendKeys("return")
     }
 
-    /// Copies the selection with ⌘C and replaces it on the clipboard with a short Markdown quote,
-    /// then, if Settings asks for it, pastes it into the note open in Obsidian.
+    /// Copies the selection with ⌘C and, unless Settings keeps Logos's own copy, replaces it on the
+    /// clipboard with a short Markdown quote or an Obsidian callout; then, if Settings asks for it,
+    /// pastes it into the note open in Obsidian.
     func copyQuote() throws {
         let pasteboard = NSPasteboard.general
         let before = pasteboard.changeCount
@@ -580,12 +582,14 @@ final class LogosDriver {
         for _ in 0..<60 where pasteboard.changeCount == before { usleep(50_000) }
         guard pasteboard.changeCount != before else { throw DriverError("Logos copied nothing. Select some text first.") }
         usleep(150_000)   // let Logos finish writing every format
-        guard let copied = copiedRichText(on: pasteboard), let quote = shortQuote(from: copied) else {
-            log("copyQuote: clipboard has \((pasteboard.types ?? []).map(\.rawValue)): \(pasteboard.string(forType: .string)?.prefix(400) ?? "")")
-            throw DriverError("The copied text had no Logos citation, so the clipboard was left as Logos copied it.")
+        if quoteFormat != .logos {
+            guard let copied = copiedRichText(on: pasteboard), let quote = logosQuote(from: copied) else {
+                log("copyQuote: clipboard has \((pasteboard.types ?? []).map(\.rawValue)): \(pasteboard.string(forType: .string)?.prefix(400) ?? "")")
+                throw DriverError("The copied text had no Logos citation, so the clipboard was left as Logos copied it.")
+            }
+            pasteboard.clearContents()
+            pasteboard.setString(quoteFormat == .callout ? quote.callout : quote.simplified, forType: .string)
         }
-        pasteboard.clearContents()
-        pasteboard.setString(quote, forType: .string)
         if quoteDestination == .obsidian { try pasteInObsidian() }
     }
 

@@ -151,15 +151,24 @@ final class GripView: NSView {
     }
 }
 
+/// How LogosBar's own windows stack, bottom to top: the toolbar (`.floating`, or `.statusBar` docked),
+/// then its tooltips, then the Settings window. Menus open at `.popUpMenu`, above all of them.
+extension NSWindow.Level {
+    static let hint = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+    static let settings = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
+}
+
 /// A tooltip-style label shown under a toolbar button. AppKit's own tooltips only appear while
 /// LogosBar is the active app, and with Logos in front it never is.
 final class HintWindow: NSPanel {
     static let shared = HintWindow()
     private let label = NSTextField(labelWithString: "")
+    /// True while one of LogosBar's menus is open, so no tooltip covers its items.
+    private var menuOpen = false
 
     private init() {
         super.init(contentRect: .zero, styleMask: [.nonactivatingPanel, .borderless], backing: .buffered, defer: true)
-        level = .popUpMenu   // above the toolbar, docked or floating
+        level = .hint   // above the toolbar, docked or floating; below Settings and menus
         ignoresMouseEvents = true
         isOpaque = false
         backgroundColor = .clear
@@ -182,11 +191,19 @@ final class HintWindow: NSPanel {
             label.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -5),
         ])
         contentView = background
+        let center = NotificationCenter.default
+        center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.menuOpen = true
+            self?.orderOut(nil)
+        }
+        center.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.menuOpen = false
+        }
     }
 
     /// Shows `text` centered below `view`, or above it when there's no room below.
     func show(_ text: String, for view: NSView) {
-        guard let window = view.window, window.isVisible else { return }
+        guard !menuOpen, let window = view.window, window.isVisible else { return }
         label.stringValue = text
         appearance = window.appearance
         let size = contentView!.fittingSize
@@ -243,6 +260,11 @@ final class HoverButton: NSButton {
         super.mouseDown(with: event)
     }
 
+    override func rightMouseDown(with event: NSEvent) {
+        hideHint()   // before the menu opens, so the hint can't cover it
+        super.rightMouseDown(with: event)
+    }
+
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         if newWindow == nil { hideHint() }
         super.viewWillMove(toWindow: newWindow)
@@ -278,6 +300,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var panel: ToolbarPanel!
     var background: NSVisualEffectView!
     var pill: NSView!
+    /// The pill sits 3 points in from the top and bottom when docked and fills the bar when floating.
+    var pillInsets: [NSLayoutConstraint] = []
     var grip: GripView!
     var gripAlongLeft: [NSLayoutConstraint] = []
     var gripAlongTop: [NSLayoutConstraint] = []
@@ -365,7 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.spacing = 2
         stack.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(stack)
-        // Docked, a solid pill behind the icons reads against any menu bar or wallpaper.
+        // A solid pill behind the icons in the chosen style reads against any menu bar, page or wallpaper.
         pill = NSView()
         pill.wantsLayer = true
         pill.layer?.cornerRadius = 7
@@ -395,8 +419,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             background.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             pill.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             pill.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+        ])
+        pillInsets = [
             pill.topAnchor.constraint(equalTo: container.topAnchor, constant: 3),
-            pill.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -3),
+            container.bottomAnchor.constraint(equalTo: pill.bottomAnchor, constant: 3),
+        ]
+        NSLayoutConstraint.activate(pillInsets)
+        NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             stack.topAnchor.constraint(equalTo: container.topAnchor),
@@ -413,13 +442,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.level = docked ? .statusBar : .floating
         panel.isMovableByWindowBackground = placement == .floating
         panel.hasShadow = !docked
-        let light = prefs.dockedStyle == .light
-        panel.appearance = docked ? NSAppearance(named: light ? .aqua : .darkAqua) : nil
+        // The chosen style applies everywhere: docked it colors the pill, floating the blurred background.
+        let light = prefs.style == .light
+        panel.appearance = NSAppearance(named: light ? .aqua : .darkAqua)
         pill.layer?.backgroundColor = (light ? NSColor(white: 0.97, alpha: 0.92) : NSColor(white: 0.12, alpha: 0.88)).cgColor
         pill.layer?.borderWidth = light ? 0.5 : 0
         pill.layer?.borderColor = NSColor(white: 0, alpha: 0.15).cgColor
         background.isHidden = docked
-        pill.isHidden = !docked
+        pillInsets.forEach { $0.constant = docked ? 3 : 0 }
         // Above the active panel LogosBar places the toolbar itself, so there's nothing to drag.
         grip.isHidden = placement != .floating
         panel.contentView?.layer?.masksToBounds = !docked
@@ -594,6 +624,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.spacing = 2 * scale
         panel.contentView?.layer?.cornerRadius = 10 * scale
         background.layer?.cornerRadius = 10 * scale
+        pill.layer?.cornerRadius = docked ? 7 : 10 * scale
         // A thin outline in the grip's accent color, drawn over the edges of everything inside.
         panel.contentView?.layer?.borderWidth = docked ? 0 : 1.5 * scale
         panel.contentView?.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.6).cgColor
@@ -638,8 +669,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     var buttonSide: CGFloat { placement == .menuBar ? 24 : 32 * prefs.size.scale }
     var iconColor: NSColor {
-        guard placement == .menuBar else { return .labelColor }
-        return prefs.dockedStyle == .light ? NSColor(white: 0.1, alpha: 1) : .white
+        prefs.style == .light ? NSColor(white: 0.1, alpha: 1) : .white
     }
 
     /// The toolbar's size for its buttons, spacing and padding.
@@ -655,11 +685,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func makeMenu() -> NSMenu {
         let menu = NSMenu()
         menu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: "")
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "Edit Actions…", action: #selector(editActions), keyEquivalent: "")
-        menu.addItem(withTitle: "Reload Actions", action: #selector(reloadActions), keyEquivalent: "")
-        menu.addItem(withTitle: "Show What LogosBar Sees", action: #selector(saveUIMap), keyEquivalent: "")
-        menu.addItem(withTitle: "Show Log", action: #selector(showLog), keyEquivalent: "")
+        // Troubleshooting items only when turned on in Settings > Advanced.
+        if prefs.troubleshooting {
+            menu.addItem(.separator())
+            menu.addItem(withTitle: "Edit Actions…", action: #selector(editActions), keyEquivalent: "")
+            menu.addItem(withTitle: "Reload Actions", action: #selector(reloadActions), keyEquivalent: "")
+            menu.addItem(withTitle: "Show What LogosBar Sees", action: #selector(saveUIMap), keyEquivalent: "")
+            menu.addItem(withTitle: "Show Log", action: #selector(showLog), keyEquivalent: "")
+        }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit LogosBar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         menu.items.forEach { if $0.action != #selector(NSApplication.terminate(_:)) && $0.action != nil { $0.target = self } }

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2b5c89"/><stop offset="1" stop-color="#122840"/></linearGradient><linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7d68e"/><stop offset="1" stop-color="#d49d3c"/></linearGradient><filter id="sh" x="-20%" y="-30%" width="140%" height="180%"><feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000" flood-opacity="0.38"/></filter></defs><rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+<circle cx="512" cy="530" r="280" fill="#0d1e31" opacity="0.45"/>
+<circle cx="512" cy="508" r="280" fill="url(#gold)" filter="url(#sh)"/>
+<circle cx="512" cy="500" r="238" fill="#f4cd7c"/>
+<text x="512" y="640" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="400" fill="#1a3a5c">λ</text>
+</svg>

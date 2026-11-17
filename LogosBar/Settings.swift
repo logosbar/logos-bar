@@ -9,8 +9,9 @@ enum Placement: String {
     case floating, menuBar, abovePanel
 }
 
-/// The docked bar's look: a dark pill with white icons, or a light pill with dark icons.
-enum DockedStyle: String {
+/// The toolbar's look in every placement: dark with white icons, or light with dark icons.
+/// (Stored under "dockedStyle", its name from when it only applied in the menu bar.)
+enum ToolbarStyle: String {
     case dark, light
 }
 
@@ -49,8 +50,8 @@ final class Preferences: ObservableObject {
     @Published var placement: Placement {
         didSet { defaults.set(placement.rawValue, forKey: "placement"); changed() }
     }
-    @Published var dockedStyle: DockedStyle {
-        didSet { defaults.set(dockedStyle.rawValue, forKey: "dockedStyle"); changed() }
+    @Published var style: ToolbarStyle {
+        didSet { defaults.set(style.rawValue, forKey: "dockedStyle"); changed() }
     }
     @Published var vertical: Bool {
         didSet { defaults.set(vertical, forKey: "vertical"); changed() }
@@ -72,6 +73,10 @@ final class Preferences: ObservableObject {
     @Published var onlyWithLogos: Bool {
         didSet { defaults.set(!onlyWithLogos, forKey: "alwaysVisible"); changed() }
     }
+    /// Adds Edit Actions, Reload Actions, Show What LogosBar Sees and Show Log to the right-click menu.
+    @Published var troubleshooting: Bool {
+        didSet { defaults.set(troubleshooting, forKey: "troubleshooting"); changed() }
+    }
     /// The toolbar's buttons in display order; turned-off buttons stay in the list, hidden from the bar.
     @Published var actions: [Action] {
         didSet { saveActions(actions); changed() }
@@ -79,13 +84,14 @@ final class Preferences: ObservableObject {
 
     init() {
         placement = Placement(rawValue: defaults.string(forKey: "placement") ?? "") ?? .floating
-        dockedStyle = DockedStyle(rawValue: defaults.string(forKey: "dockedStyle") ?? "") ?? .dark
+        style = ToolbarStyle(rawValue: defaults.string(forKey: "dockedStyle") ?? "") ?? .dark
         vertical = defaults.bool(forKey: "vertical")
         size = ToolbarSize(rawValue: defaults.string(forKey: "size") ?? "") ?? .standard
         collapseRibbon = defaults.object(forKey: "collapseRibbon") as? Bool ?? true
         onlyWithLogos = !defaults.bool(forKey: "alwaysVisible")
         recentLayoutCount = defaults.object(forKey: "recentLayoutCount") as? Int ?? 3
         quoteDestination = QuoteDestination(rawValue: defaults.string(forKey: "quoteDestination") ?? "") ?? .clipboard
+        troubleshooting = defaults.bool(forKey: "troubleshooting")
         actions = loadActions()
     }
 
@@ -114,14 +120,13 @@ struct GeneralSettings: View {
                 .pickerStyle(.radioGroup)
             }
 
-            Section("In the menu bar") {
-                Picker("Style", selection: $prefs.dockedStyle) {
-                    Text("Dark pill, white icons").tag(DockedStyle.dark)
-                    Text("Light pill, dark icons").tag(DockedStyle.light)
+            Section("Style") {
+                Picker("Toolbar", selection: $prefs.style) {
+                    Text("Dark, white icons").tag(ToolbarStyle.dark)
+                    Text("Light, dark icons").tag(ToolbarStyle.light)
                 }
                 .pickerStyle(.radioGroup)
             }
-            .disabled(prefs.placement != .menuBar)
 
             Section("Floating toolbar") {
                 Picker("Layout", selection: $prefs.vertical) {
@@ -222,6 +227,63 @@ struct ButtonsSettings: View {
     }
 }
 
+/// The Advanced tab: options for tracking down problems.
+struct AdvancedSettings: View {
+    @ObservedObject var prefs: Preferences
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Turn on troubleshooting options", isOn: $prefs.troubleshooting)
+                    .toggleStyle(.checkbox)
+            } footer: {
+                Text("Adds Edit Actions, Reload Actions, Show What LogosBar Sees and Show Log to the toolbar’s right-click menu.")
+                    .settingsFootnote()
+            }
+        }
+        .settingsPane()
+    }
+}
+
+/// The About tab: what LogosBar is, who made it, and where to find it.
+struct AboutSettings: View {
+    static let projectURL = URL(string: "https://github.com/logosbar/logos-bar")!
+
+    private var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: 14) {
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 56, height: 56)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("LogosBar").font(.title2.bold())
+                        Text("Version \(version)").foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent("Website") {
+                    Link(Self.projectURL.absoluteString.replacingOccurrences(of: "https://", with: ""),
+                         destination: Self.projectURL)
+                }
+            }
+            Section {
+                Text("LogosBar is an independent app created with Claude Cowork. It is not affiliated with, endorsed by or supported by Logos Bible Software or Faithlife.")
+                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text("Disclaimer")
+            } footer: {
+                Text("Logos and Logos Bible Software are trademarks of their respective owner. Please send questions or problems with LogosBar to its GitHub page, not to Logos support.")
+                    .settingsFootnote()
+            }
+        }
+        .settingsPane()
+    }
+}
+
 private extension View {
     /// Every tab is the same width and exactly as tall as its contents.
     func settingsPane() -> some View {
@@ -247,6 +309,8 @@ final class SettingsTabController: NSTabViewController {
         add(GeneralSettings(prefs: prefs), label: "General", symbol: "gearshape")
         add(BehaviorSettings(prefs: prefs), label: "Behavior", symbol: "slider.horizontal.3")
         add(ButtonsSettings(prefs: prefs), label: "Buttons", symbol: "square.grid.2x2")
+        add(AdvancedSettings(prefs: prefs), label: "Advanced", symbol: "wrench.and.screwdriver")
+        add(AboutSettings(), label: "About", symbol: "info.circle")
         selectedTabViewItemIndex = min(max(defaults.integer(forKey: "settingsTab"), 0), tabViewItems.count - 1)
     }
 
@@ -287,6 +351,8 @@ final class SettingsWindowController {
             window.toolbarStyle = .preference
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
+            // Above the toolbar and its tooltips, so neither covers the settings; still movable by its title bar.
+            window.level = .settings
             window.center()
             self.window = window
         }

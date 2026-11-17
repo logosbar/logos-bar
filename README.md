@@ -1,5 +1,8 @@
 # LogosBar
 
+> **Disclaimer:** LogosBar is an independent app created with Claude Cowork. It is not affiliated
+> with, endorsed by or supported by Logos Bible Software or Faithlife.
+
 A small toolbar of one-click shortcuts for Logos Bible Software on the Mac, so you don't have to
 hunt through Logos's dynamic ribbon. It can float anywhere, float just above the Logos panel
 you're working in, or sit in the menu bar just after Logos's **Help** menu.

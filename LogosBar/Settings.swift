@@ -197,7 +197,7 @@ struct BehaviorSettings: View {
             } header: {
                 Text("Copy quote button")
             } footer: {
-                Text("Logos Default Copy keeps the text and full citation exactly as Logos copies them. Simplified Formatting turns it into Markdown: the passage in quotation marks, its footnotes as Markdown footnotes, then the source with the title and page linked. Callout Formatting puts all of that in an Obsidian quote callout. In Obsidian it’s pasted where the cursor is in the open note, then Logos comes back to the front; it stays on the clipboard too.")
+                Text("**Logos Default Copy** keeps the text and full citation exactly as Logos copies them.\n\n**Simplified Formatting** turns it into Markdown: the passage in quotation marks with its italics and bold, its footnotes as Markdown footnotes, then the source with the title and page linked.\n\n**Callout Formatting** puts all of that in an Obsidian quote callout.\n\nIn Obsidian it’s pasted where the cursor is in the open note, then Logos comes back to the front; it stays on the clipboard too.")
                     .settingsFootnote()
             }
         }

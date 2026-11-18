@@ -11,7 +11,7 @@ You don't need to know Swift. You do need about twenty minutes the first time.
 
 ## What you need
 
-- A Mac with macOS 13 (Ventura) or later, and Logos Bible Software for Mac.
+- A Mac with macOS 14 (Sonoma) or later, and Logos Bible Software for Mac.
 - Apple's command-line tools (they include `git` and the Swift compiler). In the **Terminal** app
   (Applications → Utilities → Terminal):
 

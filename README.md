@@ -35,6 +35,10 @@ cd LogosBar
 This compiles the app and installs it as `~/Applications/LogosBar.app`, quitting and replacing
 any running copy (open it again afterwards). It needs Apple's command-line tools (`xcode-select --install`).
 
+To share LogosBar as a disk image, run `./make-dmg.sh` instead. It builds for Apple Silicon and
+Intel and writes `LogosBar/build/LogosBar-<version>.dmg`; see
+[INSTALL.md](INSTALL.md#making-a-disk-image).
+
 ## Permissions and the signing certificate
 
 LogosBar needs two permissions in System Settings → Privacy & Security:
@@ -179,6 +183,7 @@ strip Logos draws on the active tab.
 - `LogosBar/Driver.swift`: finding Logos's panels, reading the ribbon, and clicking and typing.
 - `LogosBar/Settings.swift`: the stored preferences and the Settings window.
 - `LogosBar/build.sh`: build, sign and install.
+- `LogosBar/make-dmg.sh`: build for Apple Silicon and Intel and package a disk image.
 
 ## Testing from the command line
 

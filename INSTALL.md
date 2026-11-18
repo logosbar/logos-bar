@@ -4,9 +4,12 @@ These steps set up LogosBar on a Mac that has never had it. They take about ten 
 the app from source, make a signing certificate so macOS remembers LogosBar's permissions, and
 then grant those permissions.
 
+If someone gave you a LogosBar disk image (`LogosBar-0.9.dmg`), you don't need to build anything.
+Follow [Installing from a disk image](#installing-from-a-disk-image) instead.
+
 ## What you need
 
-- macOS 13 (Ventura) or later.
+- macOS 14 (Sonoma) or later, on an Apple Silicon or Intel Mac.
 - Logos Bible Software for Mac, installed and signed in.
 - Apple's command-line tools, which include the Swift compiler and `git`. If you don't have them,
   run this command and click **Install** in the window that appears:
@@ -22,7 +25,7 @@ All commands go in the **Terminal** app (Applications → Utilities → Terminal
 ## 1. Download LogosBar
 
 ```bash
-git clone https://github.com/pfrobbins/logos-bar.git ~/logos-bar
+git clone https://github.com/logosbar/logos-bar.git ~/logos-bar
 ```
 
 No GitHub account is needed. You can put the folder anywhere; these steps use `~/logos-bar`.
@@ -149,6 +152,33 @@ open ~/Applications/LogosBar.app
 
 Because of the certificate, your permissions carry over. Your button order and settings are kept;
 buttons added in a new version appear at the end of the toolbar.
+
+## Installing from a disk image
+
+1. Open `LogosBar-0.9.dmg` and drag **LogosBar** onto the **Applications** shortcut beside it.
+2. Open LogosBar from the Applications folder. Because it isn't signed through Apple, macOS says it
+   can't verify LogosBar and won't open it. Click **Done**.
+3. Open **System Settings → Privacy & Security**, scroll down to the message about LogosBar, and click
+   **Open Anyway**. Confirm with your password. You only do this once.
+4. Grant the two permissions as in [step 4](#4-grant-permissions), choosing **LogosBar.app** from
+   `/Applications` if it isn't listed, then check it as in [step 5](#5-check-that-it-works).
+
+To update, quit LogosBar and drag the new version onto Applications the same way. Your permissions
+and settings carry over, as long as each disk image was made with the same certificate.
+
+## Making a disk image
+
+To share LogosBar with someone who won't build it themselves:
+
+```bash
+cd ~/logos-bar/LogosBar
+./make-dmg.sh
+```
+
+This builds LogosBar for both Apple Silicon and Intel, signs it with your "LogosBar Signing"
+certificate (step 2), and writes `build/LogosBar-<version>.dmg`. It doesn't change your installed
+copy. Always make disk images on the same Mac with the same certificate, so that the people you give
+them to keep their permissions when they update.
 
 ## Troubleshooting
 
